@@ -42,3 +42,42 @@
 
 - As soon as manifests/configs are added, update this file with exact run/test/lint/typecheck commands and command order.
 - If executable config conflicts with docs, follow executable config and update docs.
+
+## Commands (backend — run from `backend/` directory)
+
+### Install dependencies
+```
+pip install -e ".[dev]"
+pip install aiosqlite   # required for test suite (SQLite async driver)
+```
+
+### Run dev server
+```
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Run migrations (requires live PostgreSQL)
+```
+alembic upgrade head
+```
+
+### Run tests
+```
+pytest
+```
+
+### Lint
+```
+ruff check .
+```
+
+### Type check
+```
+mypy app
+```
+
+### Command order for CI
+1. `pip install -e ".[dev]" && pip install aiosqlite`
+2. `ruff check .`
+3. `mypy app`
+4. `pytest`

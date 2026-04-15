@@ -1,0 +1,324 @@
+"""
+Booking service: enforces state machine transitions and field validation.
+All state changes go through here — never set booking.status directly outside this service.
+"""
+
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.enums import ActorType, AwaitingReviewFrom, BookingStatus, ConversationState
+from app.repositories.audit_repo import AuditRepository
+from app.repositories.booking_repo import BookingRepository
+from app.repositories.session_repo import SessionRepository
+from app.services.availability_service import AvailabilityService
+
+# Required field collection order (matches STATE_MACHINE.md)
+REQUIRED_FIELD_ORDER = [
+    "scheduled_start_at",
+    "client_age",
+    "client_ethnicity",
+    "duration_minutes",
+    # client_name is optional — not in required list
+]
+
+OPTIONAL_FIELDS = ["client_name"]
+
+
+@dataclass
+class FieldValidationResult:
+    complete: bool
+    next_required_field: str | None
+    errors: list[str]
+
+
+class BookingService:
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+        self.repo = BookingRepository(db)
+        self.session_repo = SessionRepository(db)
+        self.audit = AuditRepository(db)
+        self.availability = AvailabilityService(db)
+
+    # ------------------------------------------------------------------
+    # Field inspection
+    # ------------------------------------------------------------------
+
+    def get_next_required_field(self, booking: Any) -> str | None:
+        """Returns the name of the next unfilled required field, or None if all done."""
+        for field in REQUIRED_FIELD_ORDER:
+            value = getattr(booking, field, None)
+            if value is None:
+                return field
+        return None
+
+    def validate_fields(self, booking: Any) -> FieldValidationResult:
+        errors: list[str] = []
+        next_field = self.get_next_required_field(booking)
+
+        # Age guard
+        if booking.client_age is not None and booking.client_age < 18:
+            errors.append("Client must be 18 or older.")
+
+        # Ethnicity guard
+        if booking.client_ethnicity is not None and booking.client_ethnicity.strip() == "":
+            errors.append("Ethnicity cannot be blank.")
+
+        # Duration guard
+        if booking.duration_minutes is not None and booking.duration_minutes <= 0:
+            errors.append("Duration must be a positive number of minutes.")
+
+        complete = next_field is None and len(errors) == 0
+        return FieldValidationResult(
+            complete=complete,
+            next_required_field=next_field,
+            errors=errors,
+        )
+
+    # ------------------------------------------------------------------
+    # Field update (atomic, validated)
+    # ------------------------------------------------------------------
+
+    async def update_field(
+        self,
+        booking_id: uuid.UUID,
+        field_name: str,
+        field_value: Any,
+        actor_type: ActorType = ActorType.AGENT,
+        actor_ref: str | None = None,
+    ) -> tuple[Any, list[str]]:
+        """
+        Updates a single booking field with validation.
+        Returns (updated_booking, errors).
+        """
+        booking = await self.repo.get_by_id(booking_id)
+        if not booking:
+            return None, [f"Booking {booking_id} not found."]
+
+        errors: list[str] = []
+
+        if field_name == "client_age":
+            age = int(field_value)
+            if age < 18:
+                errors.append("Client must be 18 or older.")
+                return booking, errors
+            booking.client_age = age
+
+        elif field_name == "client_ethnicity":
+            if not str(field_value).strip():
+                errors.append("Ethnicity cannot be blank.")
+                return booking, errors
+            booking.client_ethnicity = str(field_value).strip()
+
+        elif field_name == "scheduled_start_at":
+            if isinstance(field_value, str):
+                field_value = datetime.fromisoformat(field_value)
+            booking.scheduled_start_at = field_value
+            # Recompute end if duration known
+            if booking.duration_minutes:
+                booking.scheduled_end_at = field_value + timedelta(minutes=booking.duration_minutes)
+
+        elif field_name == "duration_minutes":
+            mins = int(field_value)
+            if mins <= 0:
+                errors.append("Duration must be positive.")
+                return booking, errors
+            booking.duration_minutes = mins
+            if booking.scheduled_start_at:
+                booking.scheduled_end_at = booking.scheduled_start_at + timedelta(minutes=mins)
+
+        elif field_name == "client_name":
+            booking.client_name = str(field_value).strip() or None
+
+        elif field_name == "booking_type":
+            from app.models.enums import BookingType
+
+            booking.booking_type = BookingType(field_value)
+
+        elif field_name == "outcall_address":
+            booking.outcall_address = str(field_value).strip()
+
+        elif field_name == "price_total_gbp":
+            booking.price_total_gbp = field_value  # type: ignore[assignment]
+
+        elif field_name == "advance_required_gbp":
+            booking.advance_required_gbp = field_value  # type: ignore[assignment]
+
+        elif field_name == "advance_received":
+            booking.advance_received = bool(field_value)
+
+        else:
+            errors.append(f"Unknown field: {field_name}")
+            return booking, errors
+
+        await self.repo.save(booking)
+        await self.audit.log(
+            entity_type="booking",
+            entity_id=booking_id,
+            event_type=f"field_updated:{field_name}",
+            actor_type=actor_type,
+            actor_ref=actor_ref,
+            metadata={"field": field_name, "value": str(field_value)},
+        )
+        return booking, errors
+
+    # ------------------------------------------------------------------
+    # Lifecycle transitions
+    # ------------------------------------------------------------------
+
+    async def submit_for_review(
+        self,
+        booking_id: uuid.UUID,
+        reviewer: AwaitingReviewFrom = AwaitingReviewFrom.ADMIN,
+        actor_type: ActorType = ActorType.AGENT,
+        actor_ref: str | None = None,
+    ) -> tuple[Any, list[str]]:
+        """
+        Transitions booking: DRAFT -> PENDING_REVIEW.
+        Re-checks availability before moving.
+        """
+        booking = await self.repo.get_by_id(booking_id)
+        if not booking:
+            return None, ["Booking not found."]
+
+        if booking.status != BookingStatus.DRAFT:
+            return booking, [f"Cannot submit booking in status {booking.status}."]
+
+        validation = self.validate_fields(booking)
+        if not validation.complete:
+            return booking, validation.errors or [
+                f"Missing required field: {validation.next_required_field}"
+            ]
+
+        # Re-check availability
+        avail = await self.availability.check(
+            worker_id=booking.worker_id,
+            proposed_start=booking.scheduled_start_at,
+            duration_minutes=booking.duration_minutes,
+            exclude_booking_id=booking_id,
+        )
+        if not avail.available:
+            return booking, [avail.conflict_reason or "Slot unavailable."]
+
+        booking.status = BookingStatus.PENDING_REVIEW
+        booking.awaiting_review_from = reviewer
+        await self.repo.save(booking)
+
+        # Update session state
+        session = await self.session_repo.get_by_id(booking.session_id)
+        if session:
+            await self.session_repo.update_state(session, ConversationState.WAITING_REVIEW)
+
+        await self.audit.log(
+            entity_type="booking",
+            entity_id=booking_id,
+            event_type="submitted_for_review",
+            actor_type=actor_type,
+            actor_ref=actor_ref,
+            metadata={"reviewer": reviewer.value},
+        )
+        return booking, []
+
+    async def set_status(
+        self,
+        booking_id: uuid.UUID,
+        status: BookingStatus,
+        actor_type: ActorType,
+        actor_ref: str | None = None,
+        note: str | None = None,
+    ) -> tuple[Any, list[str]]:
+        """
+        Controlled status transition with audit log.
+        Validates allowed transitions.
+        """
+        booking = await self.repo.get_by_id(booking_id)
+        if not booking:
+            return None, ["Booking not found."]
+
+        allowed = self._allowed_transitions(booking.status)
+        if status not in allowed:
+            return booking, [
+                f"Transition {booking.status} -> {status} is not allowed. "
+                f"Allowed: {[s.value for s in allowed]}"
+            ]
+
+        now = datetime.now(UTC)
+        booking.status = status
+
+        if status == BookingStatus.CONFIRMED:
+            booking.confirmed_at = now
+            # Re-check availability one final time
+            avail = await self.availability.check(
+                worker_id=booking.worker_id,
+                proposed_start=booking.scheduled_start_at,
+                duration_minutes=booking.duration_minutes,
+                exclude_booking_id=booking_id,
+            )
+            if not avail.available:
+                booking.status = BookingStatus.PENDING_REVIEW  # rollback
+                return booking, [avail.conflict_reason or "Slot conflict at confirmation."]
+
+            await self._update_session_on_terminal(booking, ConversationState.IDLE)
+
+        elif status == BookingStatus.REJECTED:
+            await self._update_session_on_terminal(booking, ConversationState.IDLE)
+
+        elif status == BookingStatus.CANCELLED:
+            booking.cancelled_at = now
+            await self._update_session_on_terminal(booking, ConversationState.IDLE)
+
+        elif status == BookingStatus.COMPLETED:
+            booking.completed_at = now
+            await self._update_session_on_terminal(booking, ConversationState.IDLE)
+
+        await self.repo.save(booking)
+        await self.audit.log(
+            entity_type="booking",
+            entity_id=booking_id,
+            event_type=f"status_changed:{status.value}",
+            actor_type=actor_type,
+            actor_ref=actor_ref,
+            metadata={"note": note or ""},
+        )
+        return booking, []
+
+    async def complete_early(
+        self,
+        booking_id: uuid.UUID,
+        actor_ref: str | None = None,
+    ) -> tuple[Any, list[str]]:
+        return await self.set_status(
+            booking_id=booking_id,
+            status=BookingStatus.COMPLETED,
+            actor_type=ActorType.WORKER,
+            actor_ref=actor_ref,
+            note="completed_early",
+        )
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _allowed_transitions(self, current: BookingStatus) -> list[BookingStatus]:
+        transitions: dict[BookingStatus, list[BookingStatus]] = {
+            BookingStatus.DRAFT: [BookingStatus.PENDING_REVIEW, BookingStatus.CANCELLED],
+            BookingStatus.PENDING_REVIEW: [
+                BookingStatus.CONFIRMED,
+                BookingStatus.REJECTED,
+                BookingStatus.CANCELLED,
+            ],
+            BookingStatus.CONFIRMED: [BookingStatus.COMPLETED, BookingStatus.CANCELLED],
+            BookingStatus.REJECTED: [],
+            BookingStatus.CANCELLED: [],
+            BookingStatus.COMPLETED: [],
+        }
+        return transitions.get(current, [])
+
+    async def _update_session_on_terminal(self, booking: Any, new_state: ConversationState) -> None:
+        session = await self.session_repo.get_by_id(booking.session_id)
+        if session:
+            session.active_booking_id = None
+            await self.session_repo.update_state(session, new_state)
