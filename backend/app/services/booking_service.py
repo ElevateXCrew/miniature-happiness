@@ -13,8 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.enums import ActorType, AwaitingReviewFrom, BookingStatus, ConversationState
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.booking_repo import BookingRepository
+from app.repositories.client_repo import ClientRepository
 from app.repositories.session_repo import SessionRepository
 from app.services.availability_service import AvailabilityService
+from app.services.event_stream import admin_event_stream
+from app.services.notification_service import NotificationService
 
 # Required field collection order (matches STATE_MACHINE.md)
 REQUIRED_FIELD_ORDER = [
@@ -40,8 +43,10 @@ class BookingService:
         self.db = db
         self.repo = BookingRepository(db)
         self.session_repo = SessionRepository(db)
+        self.client_repo = ClientRepository(db)
         self.audit = AuditRepository(db)
         self.availability = AvailabilityService(db)
+        self.notifications = NotificationService(db)
 
     # ------------------------------------------------------------------
     # Field inspection
@@ -163,6 +168,15 @@ class BookingService:
             actor_ref=actor_ref,
             metadata={"field": field_name, "value": str(field_value)},
         )
+        admin_event_stream.publish(
+            "booking.field_updated",
+            {
+                "booking_id": str(booking.id),
+                "field": field_name,
+                "value": str(field_value),
+                "actor_type": actor_type.value,
+            },
+        )
         return booking, errors
 
     # ------------------------------------------------------------------
@@ -219,6 +233,15 @@ class BookingService:
             actor_type=actor_type,
             actor_ref=actor_ref,
             metadata={"reviewer": reviewer.value},
+        )
+        await self.notifications.create_review_notifications(booking)
+        admin_event_stream.publish(
+            "booking.submitted_for_review",
+            {
+                "booking_id": str(booking.id),
+                "status": booking.status.value,
+                "awaiting_review_from": booking.awaiting_review_from.value,
+            },
         )
         return booking, []
 
@@ -283,6 +306,22 @@ class BookingService:
             actor_ref=actor_ref,
             metadata={"note": note or ""},
         )
+        await self.notifications.create_booking_decision_notifications(
+            booking=booking,
+            actor_type=actor_type,
+            note=note,
+        )
+        await self._send_client_decision_message(booking, status)
+        admin_event_stream.publish(
+            "booking.status_changed",
+            {
+                "booking_id": str(booking.id),
+                "status": booking.status.value,
+                "actor_type": actor_type.value,
+                "actor_ref": actor_ref,
+                "note": note or "",
+            },
+        )
         return booking, []
 
     async def complete_early(
@@ -322,3 +361,34 @@ class BookingService:
         if session:
             session.active_booking_id = None
             await self.session_repo.update_state(session, new_state)
+
+    async def _send_client_decision_message(self, booking: Any, status: BookingStatus) -> None:
+        if status not in {BookingStatus.CONFIRMED, BookingStatus.REJECTED, BookingStatus.CANCELLED}:
+            return
+
+        client = await self.client_repo.get_by_id(booking.client_id)
+        if client is None:
+            return
+
+        session = await self.session_repo.get_by_id(booking.session_id)
+        if session is None or session.last_channel is None:
+            return
+
+        channel = session.last_channel.value
+        if status == BookingStatus.CONFIRMED:
+            message = "You're confirmed babe. See you soon xx"
+        elif status == BookingStatus.REJECTED:
+            message = "Sorry babe, I can't do that slot now. Want another time?"
+        else:
+            message = "This booking is cancelled babe. Message me to pick a new time."
+
+        await self.notifications.send_client_message(
+            client_id=client.id,
+            channel=channel,
+            text=message,
+            context={
+                "booking_id": str(booking.id),
+                "status": status.value,
+                "origin": "booking_decision",
+            },
+        )

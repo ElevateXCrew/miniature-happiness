@@ -19,6 +19,19 @@ from app.services.worker_service import WorkerService
 router = APIRouter(prefix="/worker", tags=["worker"])
 
 
+async def _require_worker_booking(
+    db: AsyncSession,
+    booking_id: uuid.UUID,
+    worker_id: uuid.UUID,
+) -> None:
+    repo = BookingRepository(db)
+    booking = await repo.get_by_id(booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.worker_id != worker_id:
+        raise HTTPException(status_code=403, detail="Booking does not belong to worker")
+
+
 class WorkerMessageBody(BaseModel):
     worker_id: uuid.UUID
     message_text: str
@@ -38,9 +51,7 @@ async def upcoming_bookings(
     from datetime import datetime
 
     repo = BookingRepository(db)
-    bookings = await repo.list_upcoming_confirmed(
-        worker_id=worker_id, from_dt=datetime.now(UTC)
-    )
+    bookings = await repo.list_upcoming_confirmed(worker_id=worker_id, from_dt=datetime.now(UTC))
     return [
         {
             "id": str(b.id),
@@ -60,6 +71,7 @@ async def upcoming_bookings(
 async def worker_approve_booking(
     booking_id: uuid.UUID, worker_id: uuid.UUID, db: AsyncSession = Depends(get_db)
 ) -> Any:
+    await _require_worker_booking(db, booking_id, worker_id)
     svc = BookingService(db)
     booking, errors = await svc.set_status(
         booking_id=booking_id,
@@ -76,6 +88,7 @@ async def worker_approve_booking(
 async def worker_reject_booking(
     booking_id: uuid.UUID, worker_id: uuid.UUID, db: AsyncSession = Depends(get_db)
 ) -> Any:
+    await _require_worker_booking(db, booking_id, worker_id)
     svc = BookingService(db)
     booking, errors = await svc.set_status(
         booking_id=booking_id,
@@ -92,6 +105,7 @@ async def worker_reject_booking(
 async def complete_early(
     booking_id: uuid.UUID, worker_id: uuid.UUID, db: AsyncSession = Depends(get_db)
 ) -> Any:
+    await _require_worker_booking(db, booking_id, worker_id)
     svc = BookingService(db)
     booking, errors = await svc.complete_early(booking_id=booking_id, actor_ref=str(worker_id))
     if errors:

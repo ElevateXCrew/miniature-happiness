@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.engine import get_db
 from app.models.enums import ActorType, BookingStatus
+from app.repositories.audit_repo import AuditRepository
 from app.repositories.booking_repo import BookingRepository
+from app.repositories.client_repo import ClientRepository
+from app.repositories.message_repo import MessageRepository
 from app.repositories.notification_repo import NotificationRepository
 from app.services.booking_service import BookingService
 
@@ -29,34 +32,52 @@ class BookingActionNote(BaseModel):
 
 
 @router.get("/bookings")
-async def list_bookings(db: AsyncSession = Depends(get_db)) -> Any:
+async def list_bookings(
+    status: BookingStatus | None = None,
+    offset: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+) -> Any:
     repo = BookingRepository(db)
-    bookings = await repo.list_pending_review()
-    return [
-        {
-            "id": str(b.id),
-            "status": b.status.value,
-            "client_id": str(b.client_id),
-            "worker_id": str(b.worker_id),
-            "scheduled_start_at": b.scheduled_start_at.isoformat()
-            if b.scheduled_start_at
-            else None,
-            "booking_type": b.booking_type.value if b.booking_type else None,
-        }
-        for b in bookings
-    ]
+    client_repo = ClientRepository(db)
+    bookings = await repo.list_for_admin_queue(status=status, offset=offset, limit=limit)
+
+    items: list[dict[str, Any]] = []
+    for b in bookings:
+        client = await client_repo.get_by_id(b.client_id)
+        items.append(
+            {
+                "id": str(b.id),
+                "status": b.status.value,
+                "client_id": str(b.client_id),
+                "client_phone_e164": client.phone_e164 if client else None,
+                "worker_id": str(b.worker_id),
+                "scheduled_start_at": b.scheduled_start_at.isoformat()
+                if b.scheduled_start_at
+                else None,
+                "booking_type": b.booking_type.value if b.booking_type else None,
+                "awaiting_review_from": b.awaiting_review_from.value,
+                "created_at": b.created_at.isoformat(),
+                "updated_at": b.updated_at.isoformat(),
+            }
+        )
+
+    return [item for item in items]
 
 
 @router.get("/bookings/{booking_id}")
 async def get_booking(booking_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Any:
     repo = BookingRepository(db)
+    client_repo = ClientRepository(db)
     booking = await repo.get_by_id(booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    client = await client_repo.get_by_id(booking.client_id)
     return {
         "id": str(booking.id),
         "status": booking.status.value,
         "client_id": str(booking.client_id),
+        "client_phone_e164": client.phone_e164 if client else None,
         "worker_id": str(booking.worker_id),
         "session_id": str(booking.session_id),
         "booking_type": booking.booking_type.value if booking.booking_type else None,
@@ -80,7 +101,89 @@ async def get_booking(booking_id: uuid.UUID, db: AsyncSession = Depends(get_db))
         "confirmed_at": booking.confirmed_at.isoformat() if booking.confirmed_at else None,
         "cancelled_at": booking.cancelled_at.isoformat() if booking.cancelled_at else None,
         "completed_at": booking.completed_at.isoformat() if booking.completed_at else None,
+        "created_at": booking.created_at.isoformat(),
+        "updated_at": booking.updated_at.isoformat(),
     }
+
+
+@router.get("/bookings/{booking_id}/timeline")
+async def get_booking_timeline(booking_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Any:
+    booking_repo = BookingRepository(db)
+    message_repo = MessageRepository(db)
+    notification_repo = NotificationRepository(db)
+    audit_repo = AuditRepository(db)
+    from sqlalchemy import select
+
+    from app.models.booking_media import BookingMedia
+
+    booking = await booking_repo.get_by_id(booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    messages = await message_repo.list_for_session(booking.session_id)
+    notifications = await notification_repo.list_for_booking(booking_id)
+    audits = await audit_repo.list_for_entity("booking", booking_id)
+    media_result = await db.execute(
+        select(BookingMedia).where(BookingMedia.booking_id == booking_id)
+    )
+    media_items = media_result.scalars().all()
+
+    timeline: list[dict[str, Any]] = []
+    for msg in messages:
+        timeline.append(
+            {
+                "kind": "message",
+                "timestamp": msg.created_at.isoformat(),
+                "id": str(msg.id),
+                "direction": msg.direction.value,
+                "channel": msg.channel.value,
+                "sender_type": msg.sender_type.value,
+                "body": msg.body,
+            }
+        )
+
+    for event in audits:
+        timeline.append(
+            {
+                "kind": "audit",
+                "timestamp": event.created_at.isoformat(),
+                "id": str(event.id),
+                "event_type": event.event_type,
+                "actor_type": event.actor_type.value,
+                "actor_ref": event.actor_ref,
+                "metadata": event.metadata_,
+            }
+        )
+
+    for notif in notifications:
+        timeline.append(
+            {
+                "kind": "notification",
+                "timestamp": notif.created_at.isoformat(),
+                "id": str(notif.id),
+                "target_type": notif.target_type.value,
+                "target_ref": notif.target_ref,
+                "template_key": notif.template_key,
+                "status": notif.status.value,
+                "send_at": notif.send_at.isoformat(),
+            }
+        )
+
+    for media in media_items:
+        timeline.append(
+            {
+                "kind": "media",
+                "timestamp": media.created_at.isoformat(),
+                "id": str(media.id),
+                "channel": media.channel.value,
+                "media_type": media.media_type,
+                "source_url": media.source_url,
+                "is_receipt": media.is_receipt,
+            }
+        )
+
+    timeline.sort(key=lambda item: item["timestamp"])
+    return {"booking_id": str(booking_id), "timeline": timeline}
 
 
 @router.post("/bookings/{booking_id}/approve")

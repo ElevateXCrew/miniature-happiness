@@ -23,8 +23,9 @@ Notes:
 
 ## Admin Panel APIs
 
-- `GET /admin/bookings`
+- `GET /admin/bookings` (supports `status`, `offset`, `limit` query params)
 - `GET /admin/bookings/{booking_id}`
+- `GET /admin/bookings/{booking_id}/timeline`
 - `POST /admin/bookings/{booking_id}/approve`
 - `POST /admin/bookings/{booking_id}/reject`
 - `POST /admin/bookings/{booking_id}/cancel`
@@ -58,3 +59,6 @@ Notes:
 ## Realtime Sync
 
 - `GET /events/admin/stream` (SSE or websocket equivalent)
+
+Notes:
+- Stream now emits booking lifecycle and worker sync events with incremental `id` for resume via `Last-Event-ID`.

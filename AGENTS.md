@@ -2,10 +2,10 @@
 
 ## Current Repo Reality
 
-- **Phase 1 + Phase 2 Complete:** deterministic backend plus Twilio SMS/WhatsApp webhooks and OpenAI-capable orchestration are implemented.
+- **Phase 1 + Phase 2 + Phase 3 Complete:** deterministic backend, Twilio SMS/WhatsApp orchestration, admin lifecycle APIs, worker sync flows, and client decision messaging are implemented.
 - Conversation flow now supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
-- Current backend test status: **20 passing tests**.
-- Next delivery target: **Phase 3** (booking lifecycle UX + admin sync + worker command hardening).
+- Current backend test status: **24 passing tests**.
+- Next delivery target: **Phase 4** (media rules + incall/outcall enforcement + reminder operations hardening).
 
 ## Source-of-Truth Files (Read First)
 
@@ -63,7 +63,7 @@
 - `backend/app/tools/tool_runner.py` — 19 callable tools
 - `backend/app/api/routers/` — core/admin/worker/media/notifications/events + twilio + agent
 - `backend/alembic/versions/001_initial_schema.py` — Full initial migration
-- `backend/tests/` — 20 tests covering availability, state machine, idempotency, health, phase-2 orchestration
+- `backend/tests/` — 24 tests covering availability, state machine, idempotency, health, phase-2 orchestration, and phase-3 lifecycle coverage
 
 **Phase 2 Summary (Completed):**
 - ✅ Twilio webhook ingestion routes for SMS and WhatsApp
@@ -73,17 +73,25 @@
 - ✅ Message persistence for inbound + outbound with tool trace metadata
 - ✅ Cross-channel continuity via shared phone identity
 
-**Next Phase (Phase 3):**
-- Build richer admin booking queue + detail/timeline behaviors (API-complete and UI-ready)
-- Improve worker command lifecycle integration and admin sync event fidelity
-- Harden booking decision notifications (client-facing outcome messaging)
+**Phase 3 Summary (Completed):**
+- ✅ Admin booking queue improvements (`status`, `offset`, `limit`) and richer booking detail payloads
+- ✅ Booking timeline API with combined message/media/audit/notification history
+- ✅ SSE admin sync event stream with resumable `Last-Event-ID` support and keepalive frames
+- ✅ Worker action hardening with booking ownership checks + improved worker command handling
+- ✅ Deterministic review/decision notifications plus client-facing decision messaging on active channel
+- ✅ Phase 3 regression test module added (`backend/tests/test_phase3_lifecycle.py`)
+
+**Next Phase (Phase 4):**
+- Implement strict media ingestion enrichment and receipt classification behavior
+- Enforce incall/outcall branch constraints (including outcall advance + receipt gating)
+- Finalize reminder operations and channel/template correctness at T-20 across admin/worker/client
 
 ## Implementation Order (Do Not Skip)
 
 - Start with Phase 1 from `IMPLEMENTAION_PLAN.md` before channel/LLM/admin work.
 - Implement DB schema + state machine + deterministic tool services first.
 - Add Twilio/LLM orchestration only after deterministic backend behaviors are testable.
-- **Phase 1 and Phase 2 are complete.** Next: Proceed with Phase 3.
+- **Phase 1, Phase 2, and Phase 3 are complete.** Next: Proceed with Phase 4.
 
 ## AI Agent Roles for Phase 3+
 
@@ -92,22 +100,27 @@ Use these focused agent roles when parallelizing implementation work for upcomin
 1. **phase3-admin-lifecycle-agent**
    - Owns admin-side booking lifecycle behavior: queue APIs, detail/timeline payload shape, approval/rejection/cancellation/edit consistency.
    - Verifies all transitions respect `docs/STATE_MACHINE.md` and audit event creation.
+   - Status: phase ownership complete; keep for regressions only.
 
 2. **phase3-worker-sync-agent**
    - Owns worker command behavior and near real-time sync contracts (SSE/event payload shape + reliability).
    - Ensures worker actions immediately reflect in admin-facing state.
+   - Status: phase ownership complete; keep for regressions only.
 
 3. **phase3-client-notification-agent**
    - Owns deterministic client-facing status messaging after admin/worker decisions.
    - Keeps message tone aligned with Alysha persona and channel constraints.
+   - Status: phase ownership complete; keep for regressions only.
 
 4. **phase4-media-rules-agent**
    - Owns media ingestion enrichment and incall/outcall branch enforcement.
    - Implements strict outcall advance + receipt gating and WhatsApp handoff behavior.
+   - Must verify media links appear correctly in booking timeline/admin detail surfaces.
 
 5. **phase4-reminder-template-agent**
    - Owns reminder scheduling and template correctness at T-20 for admin/worker/client.
    - Verifies incall/outcall wording divergence and channel mapping.
+   - Must validate reminder behavior through both API-triggered and scheduler-triggered paths.
 
 6. **phase5-reliability-agent**
    - Owns dedup/out-of-order handling, retry/dead-letter behavior, and failure metrics.
