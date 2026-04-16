@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     secret_key: str = ""
     log_level: str = "INFO"
 
+    # Auth
+    access_token_ttl_minutes: int = 30
+    refresh_token_ttl_minutes: int = 10080
+    seed_admin_email: str = "admin@alysha.local"
+    seed_admin_password: str = "admin123"
+    seed_worker_email: str = "worker@alysha.local"
+    seed_worker_password: str = "worker123"
+
     # Worker seed
     default_worker_name: str = "Alysha"
     default_worker_timezone: str = "Europe/London"

@@ -3,8 +3,10 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies.auth import require_role
 from app.core import metrics
 from app.db.engine import get_db
+from app.models.enums import UserRole
 from app.repositories.booking_repo import BookingRepository
 from app.repositories.notification_repo import NotificationRepository
 
@@ -12,7 +14,10 @@ router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
 @router.get("")
-async def get_metrics(db: AsyncSession = Depends(get_db)) -> dict[str, dict[str, int] | int]:
+async def get_metrics(
+    _: object = Depends(require_role(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, dict[str, int] | int]:
     bookings = BookingRepository(db)
     notifications = NotificationRepository(db)
     due_notifications = await notifications.list_queued_due(datetime.now(UTC))

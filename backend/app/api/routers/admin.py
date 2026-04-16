@@ -11,21 +11,32 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies.auth import get_current_user, require_role
 from app.db.engine import get_db
 from app.models.booking_media import BookingMedia
-from app.models.enums import ActorType, BookingStatus
+from app.models.enums import ActorType, BookingStatus, SectionKey, UserRole
+from app.models.user import User
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.booking_repo import BookingRepository
 from app.repositories.client_repo import ClientRepository
 from app.repositories.message_repo import MessageRepository
 from app.repositories.notification_repo import NotificationRepository
 from app.services.booking_service import BookingService
+from app.services.permission_service import PermissionService
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
 
 
 class BookingActionNote(BaseModel):
     note: str | None = None
+
+
+class SectionPermissionUpdateRequest(BaseModel):
+    sections: dict[SectionKey, bool]
 
 
 # ------------------------------------------------------------------
@@ -379,3 +390,61 @@ async def resume_agent(db: AsyncSession = Depends(get_db)) -> Any:
         .values(state=ConversationState.IDLE)
     )
     return {"resumed": True}
+
+
+# ------------------------------------------------------------------
+# Users and section permissions
+# ------------------------------------------------------------------
+
+
+@router.get("/users/workers")
+async def list_worker_users(db: AsyncSession = Depends(get_db)) -> Any:
+    permission_service = PermissionService(db)
+    workers = await permission_service.list_worker_users()
+    return [
+        {
+            "id": str(user.id),
+            "email": user.email,
+            "is_active": user.is_active,
+            "role": user.role.value,
+            "worker_id": str(user.worker_id) if user.worker_id else None,
+        }
+        for user in workers
+    ]
+
+
+@router.get("/users/{user_id}/section-permissions")
+async def get_worker_section_permissions(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    from app.repositories.user_repo import UserRepository
+
+    user_repo = UserRepository(db)
+    target_user = await user_repo.get_by_id(user_id)
+    if not target_user or target_user.role != UserRole.WORKER:
+        raise HTTPException(status_code=404, detail="Worker user not found")
+
+    permission_service = PermissionService(db)
+    sections = await permission_service.get_effective_sections(target_user)
+    return {"user_id": str(target_user.id), "sections": sections}
+
+
+@router.put("/users/{user_id}/section-permissions")
+async def update_worker_section_permissions(
+    user_id: uuid.UUID,
+    body: SectionPermissionUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    permission_service = PermissionService(db)
+    try:
+        sections = await permission_service.set_worker_permissions(
+            worker_user_id=user_id,
+            section_updates=body.sections,
+            updated_by_user=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {"user_id": str(user_id), "sections": sections}

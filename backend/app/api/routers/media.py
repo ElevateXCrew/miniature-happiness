@@ -9,7 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies.auth import require_role
 from app.db.engine import get_db
+from app.models.enums import UserRole
 from app.services.media_service import MediaService
 
 router = APIRouter(tags=["media"])
@@ -55,7 +57,11 @@ async def ingest_media(payload: TwilioMediaPayload, db: AsyncSession = Depends(g
 
 
 @router.get("/admin/bookings/{booking_id}/media")
-async def get_booking_media(booking_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Any:
+async def get_booking_media(
+    booking_id: uuid.UUID,
+    _: object = Depends(require_role(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
     from sqlalchemy import select
 
     from app.models.booking_media import BookingMedia
@@ -80,6 +86,7 @@ async def get_booking_media(booking_id: uuid.UUID, db: AsyncSession = Depends(ge
 async def mark_receipt(
     media_id: uuid.UUID,
     body: MarkReceiptBody = MarkReceiptBody(),
+    _: object = Depends(require_role(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     svc = MediaService(db)

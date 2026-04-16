@@ -82,3 +82,19 @@ class AwaitingReviewFrom(enum.StrEnum):
 
 class InboundProvider(enum.StrEnum):
     TWILIO = "twilio"
+
+
+class UserRole(enum.StrEnum):
+    ADMIN = "admin"
+    WORKER = "worker"
+
+
+class SectionKey(enum.StrEnum):
+    DASHBOARD = "dashboard"
+    LIVE_CHAT = "live_chat"
+    BOOKINGS = "bookings"
+    TIMELINE = "timeline"
+    MEDIA = "media"
+    NOTIFICATIONS = "notifications"
+    SCHEDULE = "schedule"
+    SETTINGS = "settings"

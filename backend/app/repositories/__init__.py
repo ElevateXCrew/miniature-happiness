@@ -5,6 +5,8 @@ from app.repositories.idempotency_repo import IdempotencyRepository
 from app.repositories.message_repo import MessageRepository
 from app.repositories.notification_repo import NotificationRepository
 from app.repositories.session_repo import SessionRepository
+from app.repositories.user_repo import UserRepository
+from app.repositories.worker_permission_repo import WorkerPermissionRepository
 from app.repositories.worker_repo import WorkerRepository
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "AuditRepository",
     "IdempotencyRepository",
     "NotificationRepository",
+    "UserRepository",
+    "WorkerPermissionRepository",
 ]

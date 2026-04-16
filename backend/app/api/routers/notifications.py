@@ -10,7 +10,9 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies.auth import require_role
 from app.db.engine import get_db
+from app.models.enums import UserRole
 from app.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -28,7 +30,11 @@ class ReminderRunBody(BaseModel):
 
 
 @router.post("/dispatch")
-async def dispatch_notification(body: DispatchBody, db: AsyncSession = Depends(get_db)) -> Any:
+async def dispatch_notification(
+    body: DispatchBody,
+    _: object = Depends(require_role(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
     svc = NotificationService(db)
     if body.outcome == "sent":
         await svc.mark_sent(body.notification_id)
@@ -40,7 +46,10 @@ async def dispatch_notification(body: DispatchBody, db: AsyncSession = Depends(g
 
 
 @router.post("/dispatch/run")
-async def run_dispatch(db: AsyncSession = Depends(get_db)) -> Any:
+async def run_dispatch(
+    _: object = Depends(require_role(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
     svc = NotificationService(db)
     result = await svc.dispatch_due_notifications()
     return result
@@ -48,7 +57,9 @@ async def run_dispatch(db: AsyncSession = Depends(get_db)) -> Any:
 
 @router.post("/reminders/run")
 async def run_reminders(
-    body: ReminderRunBody = ReminderRunBody(), db: AsyncSession = Depends(get_db)
+    body: ReminderRunBody = ReminderRunBody(),
+    _: object = Depends(require_role(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
     from app.repositories.notification_repo import NotificationRepository
 
