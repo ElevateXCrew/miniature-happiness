@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core import metrics
 from app.models.enums import (
     ActorType,
     BookingType,
@@ -40,6 +41,141 @@ class NotificationService:
         self.workers = WorkerRepository(db)
         self.messages = MessageRepository(db)
         self.gateway = TwilioGateway()
+
+    async def _render_text(self, notif: Notification) -> str:
+        payload = notif.payload if isinstance(notif.payload, dict) else {}
+        booking_id = payload.get("booking_id")
+        style_hint = payload.get("style_hint")
+        if notif.template_key == "outbound_retry_message":
+            text = str(payload.get("text") or "").strip()
+            if text:
+                return text
+            return "Message from Alysha"
+        if notif.template_key.startswith("booking_reminder"):
+            return f"Reminder: booking {booking_id or ''} in 20 mins."
+        if notif.template_key.startswith("booking_pending_review"):
+            return f"Booking {booking_id or ''} is pending review."
+        if notif.template_key.startswith("booking_confirmed"):
+            return "Your booking is confirmed babe."
+        if notif.template_key.startswith("booking_rejected"):
+            return "Sorry babe, that slot isn't available now."
+        if notif.template_key.startswith("booking_cancelled"):
+            return "Booking cancelled babe."
+        if style_hint == "i_am_about_to_arrive":
+            return "I am about to arrive babe."
+        if style_hint == "are_you_coming":
+            return "Are you coming babe?"
+        return f"Notification: {notif.template_key}"
+
+    async def _resolve_destination(self, notif: Notification) -> tuple[str | None, str | None]:
+        channel = None
+        to_phone = None
+        if notif.channel == NotificationChannel.WHATSAPP:
+            channel = Channel.WHATSAPP.value
+        elif notif.channel == NotificationChannel.SMS:
+            channel = Channel.SMS.value
+
+        if channel is None:
+            return None, None
+
+        if notif.target_type == NotificationTargetType.CLIENT:
+            try:
+                client = await self.clients.get_by_id(uuid.UUID(notif.target_ref))
+            except ValueError:
+                client = None
+            if client is None:
+                return channel, None
+            to_phone = client.phone_e164
+            return channel, to_phone
+
+        if notif.target_type == NotificationTargetType.WORKER:
+            return None, None
+
+        return None, None
+
+    async def queue_outbound_retry(
+        self,
+        *,
+        client_id: uuid.UUID,
+        channel: Channel,
+        text: str,
+        context: dict[str, Any] | None,
+        error: str | None,
+        source: str,
+    ) -> Notification:
+        mapped_notification_channel = (
+            NotificationChannel.WHATSAPP if channel == Channel.WHATSAPP else NotificationChannel.SMS
+        )
+        retry_notif = await self.create(
+            target_type=NotificationTargetType.CLIENT,
+            target_ref=str(client_id),
+            template_key="outbound_retry_message",
+            payload={
+                "text": text,
+                "context": context or {},
+                "source": source,
+            },
+            send_at=datetime.now(UTC),
+            channel=mapped_notification_channel,
+        )
+        await self.mark_failed(
+            retry_notif.id,
+            error=error,
+            allow_retry=True,
+        )
+        return retry_notif
+
+    async def dispatch_due_notifications(self, *, now: datetime | None = None) -> dict[str, int]:
+        reference_now = now or datetime.now(UTC)
+        due = await self.repo.list_queued_due(reference_now)
+        sent = 0
+        failed = 0
+        dead_lettered = 0
+
+        for notif in due:
+            channel, to_phone = await self._resolve_destination(notif)
+            if channel is None:
+                notif.status = NotificationStatus.SENT
+                notif.sent_at = datetime.now(UTC)
+                await self.repo.save(notif)
+                sent += 1
+                continue
+
+            if not to_phone:
+                await self.mark_failed(
+                    notif.id,
+                    error="Destination unavailable",
+                    allow_retry=False,
+                )
+                dead_lettered += 1
+                continue
+
+            text = await self._render_text(notif)
+            send_result = await self.gateway.send_client_message(
+                to_phone_e164=to_phone,
+                channel=channel,
+                text=text,
+            )
+            if send_result.ok:
+                await self.mark_sent(notif.id)
+                sent += 1
+            else:
+                transitioned = await self.mark_failed(
+                    notif.id,
+                    error=send_result.error,
+                    allow_retry=True,
+                )
+                if transitioned == NotificationStatus.DEAD_LETTER:
+                    dead_lettered += 1
+                else:
+                    failed += 1
+
+        return {
+            "due": len(due),
+            "sent": sent,
+            "failed": failed,
+            "dead_lettered": dead_lettered,
+        }
 
     async def create(
         self,
@@ -163,13 +299,40 @@ class NotificationService:
         if notif:
             notif.status = NotificationStatus.SENT
             notif.sent_at = datetime.now(UTC)
+            notif.last_error = None
+            notif.next_retry_at = None
             await self.repo.save(notif)
+            metrics.incr("notifications_sent_total")
 
-    async def mark_failed(self, notification_id: uuid.UUID) -> None:
+    async def mark_failed(
+        self,
+        notification_id: uuid.UUID,
+        *,
+        error: str | None = None,
+        allow_retry: bool = True,
+    ) -> NotificationStatus | None:
         notif = await self.repo.get_by_id(notification_id)
-        if notif:
-            notif.status = NotificationStatus.FAILED
-            await self.repo.save(notif)
+        if not notif:
+            return None
+
+        notif.last_error = error
+        max_retries = max(0, settings.outbound_retry_max_attempts)
+        if allow_retry and notif.retry_count < max_retries:
+            notif.retry_count += 1
+            backoff = max(1, settings.outbound_retry_backoff_seconds) * (
+                2 ** (notif.retry_count - 1)
+            )
+            notif.next_retry_at = datetime.now(UTC) + timedelta(seconds=backoff)
+            notif.send_at = notif.next_retry_at
+            notif.status = NotificationStatus.RETRY_PENDING
+            metrics.incr("notifications_retry_scheduled_total")
+        else:
+            notif.status = NotificationStatus.DEAD_LETTER
+            metrics.incr("notifications_dead_letter_total")
+
+        await self.repo.save(notif)
+        metrics.incr("notifications_failed_total")
+        return notif.status
 
     async def create_review_notifications(self, booking: Any) -> list[Notification]:
         now = datetime.now(UTC)
@@ -298,4 +461,16 @@ class NotificationService:
             },
         )
         await self.messages.save(outbound)
+        if send_result.ok:
+            metrics.incr("twilio_outbound_send_ok_total")
+        else:
+            metrics.incr("twilio_outbound_send_failed_total")
+            await self.queue_outbound_retry(
+                client_id=client.id,
+                channel=mapped_channel,
+                text=text,
+                context=context,
+                error=send_result.error,
+                source="send_client_message",
+            )
         return {"ok": send_result.ok, "error": send_result.error, "message_id": str(outbound.id)}

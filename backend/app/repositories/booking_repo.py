@@ -75,6 +75,9 @@ class BookingRepository:
         )
         return list(result.scalars().all())
 
+    async def count_pending_review(self) -> int:
+        return len(await self.list_pending_review())
+
     async def list_confirmed_starting_before(self, at_or_before: datetime) -> list[Booking]:
         result = await self.db.execute(
             select(Booking).where(

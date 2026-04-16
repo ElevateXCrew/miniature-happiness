@@ -18,6 +18,7 @@ Notes:
 
 - `POST /agent/process-incoming`
   - Internal endpoint for normalized inbound events.
+  - Returns `duplicate` and `replayed` flags for idempotent/replay-safe inbound handling.
 - `POST /agent/send-message`
   - Internal endpoint for deterministic outbound dispatch.
 
@@ -60,7 +61,19 @@ Notes:
 - `POST /notifications/dispatch`
 - `POST /notifications/reminders/run`
   - If `booking_id` provided: schedules reminders for that booking only.
-  - If omitted: schedules reminders for confirmed bookings in the T-20 window and returns counts.
+  - If omitted: schedules reminders for confirmed bookings in the T-20 window and dispatches due queue.
+- `POST /notifications/dispatch/run`
+  - Runs outbound dispatch for all due queued/retry-pending notifications.
+  - Applies retry backoff and dead-letter transitions on failure.
+
+## Reliability/Metrics APIs
+
+- `GET /metrics`
+  - Returns counters and operational gauges:
+    - `pending_reviews`
+    - `queued_due_notifications`
+    - `failed_tool_calls`
+    - `reminder_failures`
 
 ## Realtime Sync
 

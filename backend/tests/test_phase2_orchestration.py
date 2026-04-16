@@ -32,7 +32,8 @@ async def test_agent_process_incoming_is_idempotent(client: AsyncClient) -> None
     assert second.status_code == 200
     second_body = second.json()
     assert second_body["duplicate"] is True
-    assert second_body["response_text"] is None
+    assert second_body["replayed"] is True
+    assert second_body["response_text"] == first_body["response_text"]
 
 
 @pytest.mark.asyncio
@@ -90,7 +91,7 @@ async def test_twilio_sms_webhook_parses_form_and_handles_duplicates(
 
     second = await client.post("/webhooks/twilio/sms", data=payload)
     assert second.status_code == 200
-    assert second.text.strip() == "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response />"
+    assert "<Message>" in second.text
 
 
 @pytest.mark.asyncio

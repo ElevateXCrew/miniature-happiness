@@ -35,5 +35,9 @@ class Settings(BaseSettings):
     slot_buffer_minutes: int = 15
     reminder_minutes_before: int = 20
 
+    # Phase 5 reliability
+    outbound_retry_max_attempts: int = 3
+    outbound_retry_backoff_seconds: int = 30
+
 
 settings = Settings()

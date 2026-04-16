@@ -14,6 +14,10 @@ class MessageRepository:
         result = await self.db.execute(select(Message).where(Message.twilio_message_sid == sid))
         return result.scalar_one_or_none()
 
+    async def get_by_id(self, message_id: uuid.UUID) -> Message | None:
+        result = await self.db.execute(select(Message).where(Message.id == message_id))
+        return result.scalar_one_or_none()
+
     async def list_for_session(self, session_id: uuid.UUID) -> list[Message]:
         result = await self.db.execute(
             select(Message).where(Message.session_id == session_id).order_by(Message.created_at)

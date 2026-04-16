@@ -18,7 +18,8 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 class DispatchBody(BaseModel):
     notification_id: uuid.UUID
-    outcome: str  # "sent" or "failed"
+    outcome: str  # "sent" or "failed" or "dead_letter"
+    error: str | None = None
 
 
 class ReminderRunBody(BaseModel):
@@ -31,9 +32,18 @@ async def dispatch_notification(body: DispatchBody, db: AsyncSession = Depends(g
     svc = NotificationService(db)
     if body.outcome == "sent":
         await svc.mark_sent(body.notification_id)
+    elif body.outcome == "dead_letter":
+        await svc.mark_failed(body.notification_id, error=body.error, allow_retry=False)
     else:
-        await svc.mark_failed(body.notification_id)
+        await svc.mark_failed(body.notification_id, error=body.error, allow_retry=True)
     return {"notification_id": str(body.notification_id), "outcome": body.outcome}
+
+
+@router.post("/dispatch/run")
+async def run_dispatch(db: AsyncSession = Depends(get_db)) -> Any:
+    svc = NotificationService(db)
+    result = await svc.dispatch_due_notifications()
+    return result
 
 
 @router.post("/reminders/run")
@@ -59,10 +69,11 @@ async def run_reminders(
     # Dispatch all queued notifications due now (stub; actual send in Phase 2)
     repo = NotificationRepository(db)
     due = await repo.list_queued_due(datetime.now(UTC))
+    dispatch = await svc.dispatch_due_notifications()
     return {
         "mode": "scheduler_window",
         "bookings_considered": scheduled["bookings_considered"],
         "scheduled": scheduled["notifications_created"],
         "due_notifications": len(due),
-        "note": "Actual dispatch implemented in Phase 2.",
+        "dispatch": dispatch,
     }

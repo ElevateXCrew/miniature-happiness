@@ -63,6 +63,8 @@ class NotificationStatus(enum.StrEnum):
     QUEUED = "queued"
     SENT = "sent"
     FAILED = "failed"
+    RETRY_PENDING = "retry_pending"
+    DEAD_LETTER = "dead_letter"
 
 
 class ActorType(enum.StrEnum):

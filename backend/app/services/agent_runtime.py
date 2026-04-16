@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.core import metrics
 from app.models.booking import Booking
 from app.models.enums import (
     ActorType,
@@ -21,6 +22,7 @@ from app.models.enums import (
     MessageDirection,
 )
 from app.repositories.booking_repo import BookingRepository
+from app.repositories.audit_repo import AuditRepository
 from app.repositories.message_repo import MessageRepository
 from app.repositories.session_repo import SessionRepository
 from app.services.availability_service import AvailabilityService
@@ -51,6 +53,7 @@ class AgentRuntimeService:
         self.db = db
         self.messages = MessageRepository(db)
         self.bookings = BookingRepository(db)
+        self.audit = AuditRepository(db)
         self.sessions = SessionRepository(db)
         self.booking_service = BookingService(db)
         self.availability = AvailabilityService(db)
@@ -179,6 +182,7 @@ class AgentRuntimeService:
     ) -> dict[str, Any]:
         method = getattr(self.tool_runner, name, None)
         if method is None:
+            metrics.incr("tool_calls_failed_total")
             return {"ok": False, "error": f"Unknown tool: {name}"}
 
         patch_args = dict(args)
@@ -192,7 +196,29 @@ class AgentRuntimeService:
         try:
             result = await method(**patch_args)
         except Exception as exc:
+            metrics.incr("tool_calls_failed_total")
+            await self.audit.log(
+                entity_type="client",
+                entity_id=client_id,
+                event_type="tool_execution_failed",
+                actor_type=ActorType.AGENT,
+                metadata={"tool": name, "arguments": patch_args, "error": str(exc)},
+            )
             return {"ok": False, "error": str(exc)}
+
+        if result.get("ok"):
+            metrics.incr("tool_calls_ok_total")
+            event = "tool_execution_ok"
+        else:
+            metrics.incr("tool_calls_failed_total")
+            event = "tool_execution_failed"
+        await self.audit.log(
+            entity_type="client",
+            entity_id=client_id,
+            event_type=event,
+            actor_type=ActorType.AGENT,
+            metadata={"tool": name, "arguments": patch_args, "result": result},
+        )
         return result
 
     async def _generate_fallback_reply(

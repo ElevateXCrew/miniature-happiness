@@ -41,6 +41,7 @@ async def process_incoming(body: ProcessIncomingBody, db: AsyncSession = Depends
     )
     return {
         "duplicate": result.duplicate,
+        "replayed": result.replayed,
         "response_text": result.response_text,
         "session_id": str(result.session_id) if result.session_id else None,
         "client_id": str(result.client_id) if result.client_id else None,
