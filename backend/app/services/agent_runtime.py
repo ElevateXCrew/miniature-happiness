@@ -4,14 +4,14 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import metrics
 from app.core.config import settings
 from app.core.logging import logger
-from app.core import metrics
 from app.models.booking import Booking
 from app.models.enums import (
     ActorType,
@@ -21,8 +21,8 @@ from app.models.enums import (
     ConversationState,
     MessageDirection,
 )
-from app.repositories.booking_repo import BookingRepository
 from app.repositories.audit_repo import AuditRepository
+from app.repositories.booking_repo import BookingRepository
 from app.repositories.message_repo import MessageRepository
 from app.repositories.session_repo import SessionRepository
 from app.services.availability_service import AvailabilityService
@@ -118,7 +118,7 @@ class AgentRuntimeService:
         client = self._get_openai_client()
 
         for _ in range(5):
-            completion = await client.chat.completions.create(
+            completion = await cast(Any, client.chat.completions).create(
                 model=settings.openai_model,
                 temperature=0.2,
                 messages=chat_messages,
@@ -219,7 +219,9 @@ class AgentRuntimeService:
             actor_type=ActorType.AGENT,
             metadata={"tool": name, "arguments": patch_args, "result": result},
         )
-        return result
+        if isinstance(result, dict):
+            return cast(dict[str, Any], result)
+        return {"ok": False, "error": "Tool returned invalid response type."}
 
     async def _generate_fallback_reply(
         self,

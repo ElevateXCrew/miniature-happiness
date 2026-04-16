@@ -1,10 +1,14 @@
 import uuid
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, Enum, ForeignKey, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import Channel, MessageDirection, SenderType
+
+if TYPE_CHECKING:
+    from app.models.conversation_session import ConversationSession
 
 
 class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -24,9 +28,9 @@ class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     twilio_message_sid: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
-    raw_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    raw_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # Relationships
-    session: Mapped["ConversationSession"] = relationship(  # noqa: F821
+    session: Mapped["ConversationSession"] = relationship(
         "ConversationSession", back_populates="messages"
     )

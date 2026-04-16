@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,7 @@ class AuditRepository:
         event_type: str,
         actor_type: ActorType,
         actor_ref: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> AuditEvent:
         event = AuditEvent(
             entity_type=entity_type,

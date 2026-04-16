@@ -1,11 +1,15 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import NotificationChannel, NotificationStatus, NotificationTargetType
+
+if TYPE_CHECKING:
+    from app.models.booking import Booking
 
 
 class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -22,7 +26,7 @@ class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Enum(NotificationChannel, name="notification_channel"), nullable=False
     )
     template_key: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[NotificationStatus] = mapped_column(
         Enum(NotificationStatus, name="notification_status"),
         nullable=False,
@@ -35,6 +39,6 @@ class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    booking: Mapped["Booking | None"] = relationship(  # noqa: F821
+    booking: Mapped["Booking | None"] = relationship(
         "Booking", back_populates="notifications"
     )

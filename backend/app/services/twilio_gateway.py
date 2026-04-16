@@ -45,7 +45,7 @@ class TwilioGateway:
             return False
         signature = request.headers.get("X-Twilio-Signature", "")
         validator = RequestValidator(token)
-        return validator.validate(str(request.url), form_data, signature)
+        return bool(validator.validate(str(request.url), form_data, signature))
 
     async def send_client_message(
         self,

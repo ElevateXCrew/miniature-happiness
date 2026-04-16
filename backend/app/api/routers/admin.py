@@ -273,7 +273,7 @@ async def mark_incall_address_sent(
 @router.patch("/bookings/{booking_id}")
 async def edit_booking(
     booking_id: uuid.UUID,
-    updates: dict,
+    updates: dict[str, Any],
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     svc = BookingService(db)

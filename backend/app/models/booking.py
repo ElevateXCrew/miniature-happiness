@@ -1,12 +1,20 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, Numeric, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import AwaitingReviewFrom, BookingStatus, BookingType
+
+if TYPE_CHECKING:
+    from app.models.booking_media import BookingMedia
+    from app.models.client import Client
+    from app.models.conversation_session import ConversationSession
+    from app.models.notification import Notification
+    from app.models.worker import Worker
 
 
 class Booking(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -70,26 +78,26 @@ class Booking(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    client: Mapped["Client"] = relationship(  # noqa: F821
+    client: Mapped["Client"] = relationship(
         "Client", back_populates="bookings"
     )
-    worker: Mapped["Worker"] = relationship(  # noqa: F821
+    worker: Mapped["Worker"] = relationship(
         "Worker", back_populates="bookings"
     )
-    session: Mapped["ConversationSession"] = relationship(  # noqa: F821
+    session: Mapped["ConversationSession"] = relationship(
         "ConversationSession",
         foreign_keys=[session_id],
         overlaps="active_sessions",
     )
-    active_sessions: Mapped[list["ConversationSession"]] = relationship(  # noqa: F821
+    active_sessions: Mapped[list["ConversationSession"]] = relationship(
         "ConversationSession",
         foreign_keys="ConversationSession.active_booking_id",
         back_populates="active_booking",
     )
-    media: Mapped[list["BookingMedia"]] = relationship(  # noqa: F821
+    media: Mapped[list["BookingMedia"]] = relationship(
         "BookingMedia", back_populates="booking"
     )
-    notifications: Mapped[list["Notification"]] = relationship(  # noqa: F821
+    notifications: Mapped[list["Notification"]] = relationship(
         "Notification", back_populates="booking"
     )
 

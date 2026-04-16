@@ -5,9 +5,9 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import metrics
 from app.core.config import settings
 from app.core.logging import logger
-from app.core import metrics
 from app.models.enums import Channel, InboundProvider, MessageDirection, SenderType
 from app.models.message import Message
 from app.repositories.client_repo import ClientRepository

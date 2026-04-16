@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 from sqlalchemy import JSON, Enum, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
@@ -19,4 +20,6 @@ class AuditEvent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Enum(ActorType, name="actor_type"), nullable=False
     )
     actor_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
