@@ -8,8 +8,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core import metrics
+from app.core.config import settings
 from app.models.enums import (
     ActorType,
     BookingType,
@@ -182,7 +182,7 @@ class NotificationService:
         target_type: NotificationTargetType,
         target_ref: str,
         template_key: str,
-        payload: dict,
+        payload: dict[str, Any],
         send_at: datetime,
         booking_id: uuid.UUID | None = None,
         channel: NotificationChannel = NotificationChannel.IN_APP,

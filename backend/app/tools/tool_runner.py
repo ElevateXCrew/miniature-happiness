@@ -32,11 +32,11 @@ from app.services.notification_service import NotificationService
 from app.services.worker_service import WorkerService
 
 
-def _ok(data: dict) -> dict:
+def _ok(data: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, **data}
 
 
-def _err(message: str) -> dict:
+def _err(message: str) -> dict[str, Any]:
     return {"ok": False, "error": message}
 
 
@@ -53,7 +53,7 @@ class ToolRunner:
     # 1. Identity and Session
     # ------------------------------------------------------------------
 
-    async def get_or_create_client_by_phone(self, phone_e164: str) -> dict:
+    async def get_or_create_client_by_phone(self, phone_e164: str) -> dict[str, Any]:
         repo = ClientRepository(self.db)
         client, created = await repo.get_or_create(phone_e164)
         return _ok(
@@ -68,7 +68,7 @@ class ToolRunner:
 
     async def get_or_create_active_session(
         self, client_id: str, worker_id: str, channel: str
-    ) -> dict:
+    ) -> dict[str, Any]:
         repo = SessionRepository(self.db)
         try:
             session, created = await repo.get_or_create(
@@ -93,7 +93,7 @@ class ToolRunner:
     # 2. Booking Data Collection
     # ------------------------------------------------------------------
 
-    async def get_required_next_field(self, booking_id: str) -> dict:
+    async def get_required_next_field(self, booking_id: str) -> dict[str, Any]:
         from app.repositories.booking_repo import BookingRepository
 
         repo = BookingRepository(self.db)
@@ -106,7 +106,7 @@ class ToolRunner:
 
     async def update_booking_field(
         self, booking_id: str, field_name: str, field_value: Any
-    ) -> dict:
+    ) -> dict[str, Any]:
         svc = BookingService(self.db)
         booking, errors = await svc.update_field(
             booking_id=uuid.UUID(booking_id),
@@ -118,7 +118,7 @@ class ToolRunner:
             return _err("; ".join(errors))
         return _ok({"booking_id": booking_id, "field_updated": field_name})
 
-    async def validate_booking_fields(self, booking_id: str) -> dict:
+    async def validate_booking_fields(self, booking_id: str) -> dict[str, Any]:
         from app.repositories.booking_repo import BookingRepository
 
         repo = BookingRepository(self.db)
@@ -141,7 +141,7 @@ class ToolRunner:
 
     async def check_availability(
         self, worker_id: str, start_at: str, duration_minutes: int
-    ) -> dict:
+    ) -> dict[str, Any]:
         svc = AvailabilityService(self.db)
         start_dt = datetime.fromisoformat(start_at)
         result = await svc.check(
@@ -159,7 +159,7 @@ class ToolRunner:
             }
         )
 
-    async def reserve_tentative_slot(self, booking_id: str) -> dict:
+    async def reserve_tentative_slot(self, booking_id: str) -> dict[str, Any]:
         from app.repositories.booking_repo import BookingRepository
 
         repo = BookingRepository(self.db)
@@ -177,7 +177,7 @@ class ToolRunner:
         )
         return _ok({"available": result.available, "conflict_reason": result.conflict_reason})
 
-    async def release_slot(self, booking_id: str, reason: str) -> dict:
+    async def release_slot(self, booking_id: str, reason: str) -> dict[str, Any]:
         # Slot is implicitly released when booking moves to CANCELLED/REJECTED/COMPLETED.
         from app.repositories.audit_repo import AuditRepository
 
@@ -195,7 +195,9 @@ class ToolRunner:
     # 4. Lifecycle Actions
     # ------------------------------------------------------------------
 
-    async def submit_booking_for_review(self, booking_id: str, reviewer: str = "admin") -> dict:
+    async def submit_booking_for_review(
+        self, booking_id: str, reviewer: str = "admin"
+    ) -> dict[str, Any]:
         svc = BookingService(self.db)
         try:
             reviewer_enum = AwaitingReviewFrom(reviewer)
@@ -216,7 +218,7 @@ class ToolRunner:
         actor_type: str,
         actor_ref: str | None = None,
         note: str | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         svc = BookingService(self.db)
         try:
             status_enum = BookingStatus(status)
@@ -234,7 +236,9 @@ class ToolRunner:
             return _err("; ".join(errors))
         return _ok({"booking_id": booking_id, "new_status": booking.status.value})
 
-    async def complete_booking_early(self, booking_id: str, actor_ref: str | None = None) -> dict:
+    async def complete_booking_early(
+        self, booking_id: str, actor_ref: str | None = None
+    ) -> dict[str, Any]:
         svc = BookingService(self.db)
         booking, errors = await svc.complete_early(
             booking_id=uuid.UUID(booking_id), actor_ref=actor_ref
@@ -248,8 +252,12 @@ class ToolRunner:
     # ------------------------------------------------------------------
 
     async def send_client_message(
-        self, client_id: str, channel: str, text: str, context: dict | None = None
-    ) -> dict:
+        self,
+        client_id: str,
+        channel: str,
+        text: str,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         # Actual Twilio send is implemented in Phase 2.
         # For Phase 1 this is a stub that logs intent.
         from app.repositories.audit_repo import AuditRepository
@@ -264,7 +272,7 @@ class ToolRunner:
         )
         return _ok({"client_id": client_id, "channel": channel, "queued": True, "stub": True})
 
-    async def route_media_request_to_whatsapp(self, client_id: str) -> dict:
+    async def route_media_request_to_whatsapp(self, client_id: str) -> dict[str, Any]:
         return await self.send_client_message(
             client_id=client_id,
             channel="sms",
@@ -277,8 +285,8 @@ class ToolRunner:
     # ------------------------------------------------------------------
 
     async def attach_media_to_session_or_booking(
-        self, client_id: str, session_id: str, media_payload: dict
-    ) -> dict:
+        self, client_id: str, session_id: str, media_payload: dict[str, Any]
+    ) -> dict[str, Any]:
         svc = MediaService(self.db)
         media = await svc.attach(
             client_id=uuid.UUID(client_id),
@@ -293,7 +301,9 @@ class ToolRunner:
         )
         return _ok({"media_id": str(media.id), "is_receipt": media.is_receipt})
 
-    async def mark_media_as_receipt(self, media_id: str, booking_id: str | None = None) -> dict:
+    async def mark_media_as_receipt(
+        self, media_id: str, booking_id: str | None = None
+    ) -> dict[str, Any]:
         svc = MediaService(self.db)
         media = await svc.mark_as_receipt(
             media_id=uuid.UUID(media_id),
@@ -318,11 +328,11 @@ class ToolRunner:
         target_type: str,
         target_ref: str,
         template_key: str,
-        payload: dict,
+        payload: dict[str, Any],
         send_at: str,
         booking_id: str | None = None,
         channel: str = "in_app",
-    ) -> dict:
+    ) -> dict[str, Any]:
         svc = NotificationService(self.db)
         notif = await svc.create(
             target_type=NotificationTargetType(target_type),
@@ -337,7 +347,7 @@ class ToolRunner:
 
     async def schedule_booking_reminders(
         self, booking_id: str, minutes_before: int = settings.reminder_minutes_before
-    ) -> dict:
+    ) -> dict[str, Any]:
         svc = NotificationService(self.db)
         notifications = await svc.schedule_booking_reminders(
             booking_id=uuid.UUID(booking_id), minutes_before=minutes_before
@@ -354,7 +364,7 @@ class ToolRunner:
     # 8. Worker Commands
     # ------------------------------------------------------------------
 
-    async def process_worker_command(self, worker_id: str, message_text: str) -> dict:
+    async def process_worker_command(self, worker_id: str, message_text: str) -> dict[str, Any]:
         svc = WorkerService(self.db)
         result = await svc.process_command(
             worker_id=uuid.UUID(worker_id), message_text=message_text
@@ -363,7 +373,7 @@ class ToolRunner:
 
     async def set_worker_availability_override(
         self, worker_id: str, from_at: str, to_at: str, mode: str
-    ) -> dict:
+    ) -> dict[str, Any]:
         svc = WorkerService(self.db)
         result = await svc.set_availability_override(
             worker_id=uuid.UUID(worker_id),

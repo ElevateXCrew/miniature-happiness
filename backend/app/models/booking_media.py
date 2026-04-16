@@ -1,10 +1,16 @@
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Enum, ForeignKey, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import Channel
+
+if TYPE_CHECKING:
+    from app.models.booking import Booking
+    from app.models.client import Client
+    from app.models.conversation_session import ConversationSession
 
 
 class BookingMedia(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -29,12 +35,12 @@ class BookingMedia(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_receipt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Relationships
-    client: Mapped["Client"] = relationship(  # noqa: F821
+    client: Mapped["Client"] = relationship(
         "Client", back_populates="booking_media"
     )
-    booking: Mapped["Booking | None"] = relationship(  # noqa: F821
+    booking: Mapped["Booking | None"] = relationship(
         "Booking", back_populates="media"
     )
-    session: Mapped["ConversationSession"] = relationship(  # noqa: F821
+    session: Mapped["ConversationSession"] = relationship(
         "ConversationSession", back_populates="booking_media"
     )

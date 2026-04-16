@@ -62,11 +62,17 @@ class AvailabilityService:
             return AvailabilityResult(available=True)
 
         # Find next available slot after the latest conflicting booking end + buffer
-        latest_end = max(
-            b.scheduled_end_at + self.buffer  # type: ignore[operator]
+        conflict_ends = [
+            b.scheduled_end_at + self.buffer
             for b in conflicts
-            if b.scheduled_end_at
-        )
+            if b.scheduled_end_at is not None
+        ]
+        if not conflict_ends:
+            return AvailabilityResult(
+                available=False,
+                conflict_reason="Time slot conflicts with existing booking(s).",
+            )
+        latest_end = max(conflict_ends)
         return AvailabilityResult(
             available=False,
             conflict_reason=(
