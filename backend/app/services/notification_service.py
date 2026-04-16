@@ -4,19 +4,30 @@ Notification service: queues and dispatches notifications, schedules reminders.
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.enums import (
+    ActorType,
     BookingType,
+    Channel,
+    MessageDirection,
     NotificationChannel,
     NotificationStatus,
     NotificationTargetType,
+    SenderType,
 )
+from app.models.message import Message
 from app.models.notification import Notification
 from app.repositories.booking_repo import BookingRepository
+from app.repositories.client_repo import ClientRepository
+from app.repositories.message_repo import MessageRepository
 from app.repositories.notification_repo import NotificationRepository
+from app.repositories.session_repo import SessionRepository
+from app.repositories.worker_repo import WorkerRepository
+from app.services.twilio_gateway import TwilioGateway
 
 
 class NotificationService:
@@ -24,6 +35,11 @@ class NotificationService:
         self.db = db
         self.repo = NotificationRepository(db)
         self.booking_repo = BookingRepository(db)
+        self.clients = ClientRepository(db)
+        self.sessions = SessionRepository(db)
+        self.workers = WorkerRepository(db)
+        self.messages = MessageRepository(db)
+        self.gateway = TwilioGateway()
 
     async def create(
         self,
@@ -128,3 +144,109 @@ class NotificationService:
         if notif:
             notif.status = NotificationStatus.FAILED
             await self.repo.save(notif)
+
+    async def create_review_notifications(self, booking: Any) -> list[Notification]:
+        now = datetime.now(UTC)
+        notifications: list[Notification] = []
+
+        notifications.append(
+            await self.create(
+                target_type=NotificationTargetType.ADMIN,
+                target_ref="admin",
+                template_key="booking_pending_review_admin",
+                payload={
+                    "booking_id": str(booking.id),
+                    "status": booking.status.value,
+                    "awaiting_review_from": booking.awaiting_review_from.value,
+                },
+                send_at=now,
+                booking_id=booking.id,
+                channel=NotificationChannel.IN_APP,
+            )
+        )
+        notifications.append(
+            await self.create(
+                target_type=NotificationTargetType.WORKER,
+                target_ref=str(booking.worker_id),
+                template_key="booking_pending_review_worker",
+                payload={"booking_id": str(booking.id), "status": booking.status.value},
+                send_at=now,
+                booking_id=booking.id,
+                channel=NotificationChannel.WHATSAPP,
+            )
+        )
+        return notifications
+
+    async def create_booking_decision_notifications(
+        self,
+        booking: Any,
+        actor_type: ActorType,
+        note: str | None = None,
+    ) -> list[Notification]:
+        status = booking.status.value.lower()
+        if status not in {"confirmed", "rejected", "cancelled", "completed"}:
+            return []
+
+        now = datetime.now(UTC)
+        return [
+            await self.create(
+                target_type=NotificationTargetType.ADMIN,
+                target_ref="admin",
+                template_key=f"booking_{status}_admin",
+                payload={
+                    "booking_id": str(booking.id),
+                    "status": booking.status.value,
+                    "actor_type": actor_type.value,
+                    "note": note or "",
+                },
+                send_at=now,
+                booking_id=booking.id,
+                channel=NotificationChannel.IN_APP,
+            )
+        ]
+
+    async def send_client_message(
+        self,
+        client_id: uuid.UUID,
+        channel: str,
+        text: str,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        client = await self.clients.get_by_id(client_id)
+        if client is None:
+            return {"ok": False, "error": "Client not found."}
+
+        worker = await self.workers.get_active_worker()
+        if worker is None:
+            worker, _ = await self.workers.get_or_create_default(
+                name="Alysha", timezone="Europe/London"
+            )
+
+        mapped_channel = Channel.WHATSAPP if channel == "whatsapp" else Channel.SMS
+        session, _ = await self.sessions.get_or_create(client.id, worker.id, mapped_channel)
+        send_result = await self.gateway.send_client_message(
+            to_phone_e164=client.phone_e164,
+            channel=mapped_channel.value,
+            text=text,
+        )
+
+        outbound = Message(
+            session_id=session.id,
+            direction=MessageDirection.OUTBOUND,
+            channel=mapped_channel,
+            sender_type=SenderType.AGENT,
+            body=text,
+            twilio_message_sid=send_result.sid,
+            raw_payload={
+                "decision_send": True,
+                "context": context,
+                "dispatch": {
+                    "ok": send_result.ok,
+                    "sid": send_result.sid,
+                    "stub": send_result.stub,
+                    "error": send_result.error,
+                },
+            },
+        )
+        await self.messages.save(outbound)
+        return {"ok": send_result.ok, "error": send_result.error, "message_id": str(outbound.id)}

@@ -75,6 +75,18 @@ class BookingRepository:
         )
         return list(result.scalars().all())
 
+    async def list_for_admin_queue(
+        self,
+        status: BookingStatus | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[Booking]:
+        query = select(Booking).order_by(Booking.created_at.desc()).offset(offset).limit(limit)
+        if status is not None:
+            query = query.where(Booking.status == status)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
     async def save(self, booking: Booking) -> Booking:
         self.db.add(booking)
         await self.db.flush()
