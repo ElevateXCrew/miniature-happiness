@@ -9,20 +9,22 @@ class Settings(BaseSettings):
     )
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/alysha_booking"
+    database_url: str = "sqlite+aiosqlite:///./alysha_booking.db"
 
     # OpenAI
     openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
 
     # Twilio
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_sms_number: str = ""
     twilio_whatsapp_number: str = ""
+    twilio_validate_signature: bool = True
 
     # App
     app_env: str = "development"
-    secret_key: str = "change-me-in-production"
+    secret_key: str = ""
     log_level: str = "INFO"
 
     # Worker seed

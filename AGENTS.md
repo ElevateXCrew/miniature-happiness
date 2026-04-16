@@ -2,9 +2,10 @@
 
 ## Current Repo Reality
 
-- **Phase 1 Complete:** FastAPI backend fully implemented with PostgreSQL, all core business logic, 16 passing tests, zero lint errors.
-- Backend is deterministic and testable; all state machine behaviors operational without LLM/Twilio integration.
-- Ready for Phase 2: Twilio SMS/WhatsApp webhooks + OpenAI LLM orchestration.
+- **Phase 1 + Phase 2 Complete:** deterministic backend plus Twilio SMS/WhatsApp webhooks and OpenAI-capable orchestration are implemented.
+- Conversation flow now supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
+- Current backend test status: **20 passing tests**.
+- Next delivery target: **Phase 3** (booking lifecycle UX + admin sync + worker command hardening).
 
 ## Source-of-Truth Files (Read First)
 
@@ -58,25 +59,70 @@
 **Relevant Directories:**
 - `backend/app/models/` — 8 SQLAlchemy models + 14 enums
 - `backend/app/repositories/` — 8 repository classes
-- `backend/app/services/` — 5 service classes
+- `backend/app/services/` — orchestration + business services (booking, availability, media, notifications, worker, agent runtime, twilio gateway)
 - `backend/app/tools/tool_runner.py` — 19 callable tools
-- `backend/app/api/routers/` — 6 API routers
+- `backend/app/api/routers/` — core/admin/worker/media/notifications/events + twilio + agent
 - `backend/alembic/versions/001_initial_schema.py` — Full initial migration
-- `backend/tests/` — 16 tests covering availability, state machine, idempotency, health
+- `backend/tests/` — 20 tests covering availability, state machine, idempotency, health, phase-2 orchestration
 
-**Next Phase (Phase 2):**
-- Implement Twilio SMS and WhatsApp webhooks
-- Integrate OpenAI LLM orchestration layer
-- Load channel-specific prompts (sms.txt, whatsapp.txt)
-- Persist conversation history with tool call traces
-- Implement cross-channel continuity (SMS → WhatsApp handoff)
+**Phase 2 Summary (Completed):**
+- ✅ Twilio webhook ingestion routes for SMS and WhatsApp
+- ✅ Internal `/agent/process-incoming` and `/agent/send-message` orchestration endpoints
+- ✅ Channel-specific prompt loading from `prompts/sms.txt` and `prompts/whatsapp.txt`
+- ✅ OpenAI orchestration runtime with deterministic fallback behavior
+- ✅ Message persistence for inbound + outbound with tool trace metadata
+- ✅ Cross-channel continuity via shared phone identity
+
+**Next Phase (Phase 3):**
+- Build richer admin booking queue + detail/timeline behaviors (API-complete and UI-ready)
+- Improve worker command lifecycle integration and admin sync event fidelity
+- Harden booking decision notifications (client-facing outcome messaging)
 
 ## Implementation Order (Do Not Skip)
 
 - Start with Phase 1 from `IMPLEMENTAION_PLAN.md` before channel/LLM/admin work.
 - Implement DB schema + state machine + deterministic tool services first.
 - Add Twilio/LLM orchestration only after deterministic backend behaviors are testable.
-- **Phase 1 is complete.** Next: Proceed with Phase 2 (Twilio webhooks + LLM orchestration).
+- **Phase 1 and Phase 2 are complete.** Next: Proceed with Phase 3.
+
+## AI Agent Roles for Phase 3+
+
+Use these focused agent roles when parallelizing implementation work for upcoming phases.
+
+1. **phase3-admin-lifecycle-agent**
+   - Owns admin-side booking lifecycle behavior: queue APIs, detail/timeline payload shape, approval/rejection/cancellation/edit consistency.
+   - Verifies all transitions respect `docs/STATE_MACHINE.md` and audit event creation.
+
+2. **phase3-worker-sync-agent**
+   - Owns worker command behavior and near real-time sync contracts (SSE/event payload shape + reliability).
+   - Ensures worker actions immediately reflect in admin-facing state.
+
+3. **phase3-client-notification-agent**
+   - Owns deterministic client-facing status messaging after admin/worker decisions.
+   - Keeps message tone aligned with Alysha persona and channel constraints.
+
+4. **phase4-media-rules-agent**
+   - Owns media ingestion enrichment and incall/outcall branch enforcement.
+   - Implements strict outcall advance + receipt gating and WhatsApp handoff behavior.
+
+5. **phase4-reminder-template-agent**
+   - Owns reminder scheduling and template correctness at T-20 for admin/worker/client.
+   - Verifies incall/outcall wording divergence and channel mapping.
+
+6. **phase5-reliability-agent**
+   - Owns dedup/out-of-order handling, retry/dead-letter behavior, and failure metrics.
+   - Adds resilience and race-condition tests before launch readiness.
+
+7. **qa-regression-agent**
+   - Maintains end-to-end regression matrix across SMS/WhatsApp handoff, booking edit paths, and conflict scenarios.
+   - Enforces CI gate: lint + type check + tests with zero regressions.
+
+## Agent Handoff Rules
+
+- Every agent must read: `IMPLEMENTAION_PLAN.md`, `docs/STATE_MACHINE.md`, `docs/TOOL_CATALOG.md`, and `docs/WORKFLOWS.md` before coding.
+- Never bypass deterministic backend guards with prompt-only logic.
+- Keep all secrets and deployment-specific values in `.env` only; no hardcoded credentials.
+- Update tests alongside behavior changes and document new/changed endpoints in `docs/API_ENDPOINTS.md`.
 
 ## Data/Identity Rules
 
