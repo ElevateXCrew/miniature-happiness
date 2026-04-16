@@ -11,12 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import (
     admin,
     agent,
+    auth,
     events,
     health,
     media,
     metrics,
     notifications,
     twilio,
+    ui,
     worker,
 )
 from app.core.config import settings
@@ -29,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     logger.info("Starting Alysha Booking Assistant", env=settings.app_env)
     await _seed_default_worker()
+    await _seed_default_users()
     yield
     logger.info("Shutting down")
     await engine.dispose()
@@ -56,6 +59,51 @@ async def _seed_default_worker() -> None:
             await db.rollback()
 
 
+async def _seed_default_users() -> None:
+    """Ensure default admin/worker users exist in the DB on startup."""
+    from app.db.engine import AsyncSessionLocal
+    from app.models.enums import UserRole
+    from app.repositories.user_repo import UserRepository
+    from app.repositories.worker_repo import WorkerRepository
+    from app.services.auth_service import hash_password
+
+    async with AsyncSessionLocal() as db:
+        try:
+            user_repo = UserRepository(db)
+            worker_repo = WorkerRepository(db)
+            worker = await worker_repo.get_active_worker()
+
+            admin = await user_repo.get_by_email(settings.seed_admin_email)
+            if not admin:
+                admin = await user_repo.create_user(
+                    email=settings.seed_admin_email,
+                    password_hash=hash_password(settings.seed_admin_password),
+                    role=UserRole.ADMIN,
+                )
+                logger.info("Seeded default admin user", email=admin.email, id=str(admin.id))
+
+            worker_user = await user_repo.get_by_email(settings.seed_worker_email)
+            if not worker_user:
+                worker_user = await user_repo.create_user(
+                    email=settings.seed_worker_email,
+                    password_hash=hash_password(settings.seed_worker_password),
+                    role=UserRole.WORKER,
+                    worker_id=worker.id if worker else None,
+                )
+                logger.info(
+                    "Seeded default worker user",
+                    email=worker_user.email,
+                    id=str(worker_user.id),
+                )
+            elif worker and worker_user.worker_id is None:
+                worker_user.worker_id = worker.id
+
+            await db.commit()
+        except Exception as e:
+            logger.error("Failed to seed default users", error=str(e))
+            await db.rollback()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Alysha Booking Assistant API",
@@ -74,6 +122,8 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(health.router)
+    app.include_router(auth.router)
+    app.include_router(ui.router)
     app.include_router(admin.router)
     app.include_router(worker.router)
     app.include_router(media.router)

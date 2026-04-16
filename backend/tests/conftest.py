@@ -16,6 +16,9 @@ from app.db.base import Base
 from app.db.engine import get_db
 from app.main import app
 from app.models import *  # noqa: F401, F403 — registers all models
+from app.models.enums import UserRole
+from app.models.user import User
+from app.services.auth_service import AuthService, hash_password
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -46,8 +49,21 @@ async def db(engine) -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture
 async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    # Create a default authenticated admin user for protected API tests.
+    admin_user = User(
+        email=f"admin-{uuid.uuid4().hex[:8]}@test.local",
+        password_hash=hash_password("admin123"),
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+    db.add(admin_user)
+    await db.flush()
+
+    token_pair = await AuthService(db).issue_token_pair(admin_user)
+
     app.dependency_overrides[get_db] = lambda: db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.headers["Authorization"] = f"Bearer {token_pair['access_token']}"
         yield ac
     app.dependency_overrides.clear()
 

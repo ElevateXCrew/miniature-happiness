@@ -10,13 +10,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies.auth import get_current_user, require_role, require_section
 from app.db.engine import get_db
-from app.models.enums import ActorType, BookingStatus
+from app.models.enums import ActorType, BookingStatus, SectionKey, UserRole
+from app.models.user import User
 from app.repositories.booking_repo import BookingRepository
 from app.services.booking_service import BookingService
 from app.services.worker_service import WorkerService
 
-router = APIRouter(prefix="/worker", tags=["worker"])
+router = APIRouter(
+    prefix="/worker",
+    tags=["worker"],
+    dependencies=[Depends(require_role(UserRole.WORKER, UserRole.ADMIN))],
+)
 
 
 async def _require_worker_booking(
@@ -43,13 +49,28 @@ class AvailabilityBlock(BaseModel):
     to_at: str
 
 
+def _resolve_worker_id(current_user: User, requested_worker_id: uuid.UUID) -> uuid.UUID:
+    if current_user.role == UserRole.WORKER:
+        if current_user.worker_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Worker user is not linked to a worker record",
+            )
+        if requested_worker_id != current_user.worker_id:
+            raise HTTPException(status_code=403, detail="Cannot act on another worker")
+    return requested_worker_id
+
+
 @router.get("/bookings/upcoming")
 async def upcoming_bookings(
     worker_id: uuid.UUID,
+    _: User = Depends(require_section(SectionKey.BOOKINGS)),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     from datetime import datetime
 
+    worker_id = _resolve_worker_id(current_user, worker_id)
     repo = BookingRepository(db)
     bookings = await repo.list_upcoming_confirmed(worker_id=worker_id, from_dt=datetime.now(UTC))
     return [
@@ -69,8 +90,13 @@ async def upcoming_bookings(
 
 @router.post("/bookings/{booking_id}/approve")
 async def worker_approve_booking(
-    booking_id: uuid.UUID, worker_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+    booking_id: uuid.UUID,
+    worker_id: uuid.UUID,
+    _: User = Depends(require_section(SectionKey.BOOKINGS)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
+    worker_id = _resolve_worker_id(current_user, worker_id)
     await _require_worker_booking(db, booking_id, worker_id)
     svc = BookingService(db)
     booking, errors = await svc.set_status(
@@ -86,8 +112,13 @@ async def worker_approve_booking(
 
 @router.post("/bookings/{booking_id}/reject")
 async def worker_reject_booking(
-    booking_id: uuid.UUID, worker_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+    booking_id: uuid.UUID,
+    worker_id: uuid.UUID,
+    _: User = Depends(require_section(SectionKey.BOOKINGS)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
+    worker_id = _resolve_worker_id(current_user, worker_id)
     await _require_worker_booking(db, booking_id, worker_id)
     svc = BookingService(db)
     booking, errors = await svc.set_status(
@@ -103,8 +134,13 @@ async def worker_reject_booking(
 
 @router.post("/bookings/{booking_id}/complete-early")
 async def complete_early(
-    booking_id: uuid.UUID, worker_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+    booking_id: uuid.UUID,
+    worker_id: uuid.UUID,
+    _: User = Depends(require_section(SectionKey.BOOKINGS)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> Any:
+    worker_id = _resolve_worker_id(current_user, worker_id)
     await _require_worker_booking(db, booking_id, worker_id)
     svc = BookingService(db)
     booking, errors = await svc.complete_early(booking_id=booking_id, actor_ref=str(worker_id))
@@ -114,16 +150,28 @@ async def complete_early(
 
 
 @router.post("/availability/free-now")
-async def free_now(body: WorkerMessageBody, db: AsyncSession = Depends(get_db)) -> Any:
+async def free_now(
+    body: WorkerMessageBody,
+    _: User = Depends(require_section(SectionKey.SCHEDULE)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    body.worker_id = _resolve_worker_id(current_user, body.worker_id)
     svc = WorkerService(db)
     result = await svc.process_command(worker_id=body.worker_id, message_text="free now")
     return {"success": result.success, "message": result.message}
 
 
 @router.post("/availability/block")
-async def block_availability(body: AvailabilityBlock, db: AsyncSession = Depends(get_db)) -> Any:
+async def block_availability(
+    body: AvailabilityBlock,
+    _: User = Depends(require_section(SectionKey.SCHEDULE)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
     from datetime import datetime
 
+    body.worker_id = _resolve_worker_id(current_user, body.worker_id)
     svc = WorkerService(db)
     result = await svc.set_availability_override(
         worker_id=body.worker_id,
@@ -135,7 +183,13 @@ async def block_availability(body: AvailabilityBlock, db: AsyncSession = Depends
 
 
 @router.post("/messages")
-async def worker_message(body: WorkerMessageBody, db: AsyncSession = Depends(get_db)) -> Any:
+async def worker_message(
+    body: WorkerMessageBody,
+    _: User = Depends(require_section(SectionKey.LIVE_CHAT)),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    body.worker_id = _resolve_worker_id(current_user, body.worker_id)
     svc = WorkerService(db)
     result = await svc.process_command(worker_id=body.worker_id, message_text=body.message_text)
     return {"success": result.success, "message": result.message}

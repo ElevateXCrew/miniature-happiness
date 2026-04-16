@@ -16,12 +16,16 @@ from app.models.enums import (
     NotificationChannel,
     NotificationStatus,
     NotificationTargetType,
+    SectionKey,
     SenderType,
+    UserRole,
 )
 from app.models.inbound_idempotency import InboundIdempotency
 from app.models.message import Message
 from app.models.notification import Notification
+from app.models.user import User
 from app.models.worker import Worker
+from app.models.worker_section_permission import WorkerSectionPermission
 
 __all__ = [
     "Worker",
@@ -33,6 +37,8 @@ __all__ = [
     "Notification",
     "AuditEvent",
     "InboundIdempotency",
+    "User",
+    "WorkerSectionPermission",
     # Enums
     "ConversationState",
     "BookingStatus",
@@ -46,4 +52,6 @@ __all__ = [
     "ActorType",
     "AwaitingReviewFrom",
     "InboundProvider",
+    "UserRole",
+    "SectionKey",
 ]
