@@ -47,9 +47,22 @@ async def run_reminders(
         notifications = await svc.schedule_booking_reminders(
             booking_id=body.booking_id, minutes_before=body.minutes_before
         )
-        return {"scheduled": len(notifications)}
+        return {
+            "mode": "single_booking",
+            "scheduled": len(notifications),
+            "notification_ids": [str(item.id) for item in notifications],
+        }
+
+    svc = NotificationService(db)
+    scheduled = await svc.schedule_due_booking_reminders(minutes_before=body.minutes_before)
 
     # Dispatch all queued notifications due now (stub; actual send in Phase 2)
     repo = NotificationRepository(db)
     due = await repo.list_queued_due(datetime.now(UTC))
-    return {"due_notifications": len(due), "note": "Actual dispatch implemented in Phase 2."}
+    return {
+        "mode": "scheduler_window",
+        "bookings_considered": scheduled["bookings_considered"],
+        "scheduled": scheduled["notifications_created"],
+        "due_notifications": len(due),
+        "note": "Actual dispatch implemented in Phase 2.",
+    }

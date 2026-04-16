@@ -29,7 +29,9 @@ class NotificationRepository:
 
     async def list_for_booking(self, booking_id: uuid.UUID) -> list[Notification]:
         result = await self.db.execute(
-            select(Notification).where(Notification.booking_id == booking_id)
+            select(Notification)
+            .where(Notification.booking_id == booking_id)
+            .order_by(Notification.created_at)
         )
         return list(result.scalars().all())
 

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.booking import Booking
 from app.models.client import Client
 from app.models.conversation_session import ConversationSession
-from app.models.enums import BookingStatus, Channel, ConversationState
+from app.models.enums import BookingStatus, BookingType, Channel, ConversationState
 from app.models.worker import Worker
 from app.services.booking_service import BookingService
 
@@ -42,6 +42,7 @@ async def _setup(db: AsyncSession):
         worker_id=worker.id,
         session_id=session.id,
         status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
         scheduled_start_at=start,
         duration_minutes=60,
         scheduled_end_at=start + timedelta(minutes=60),
@@ -152,6 +153,7 @@ async def test_double_booking_blocked(db: AsyncSession) -> None:
         worker_id=worker.id,
         session_id=session.id,
         status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
         scheduled_start_at=start,
         duration_minutes=60,
         scheduled_end_at=start + timedelta(minutes=60),

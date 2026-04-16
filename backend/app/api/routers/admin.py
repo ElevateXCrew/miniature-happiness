@@ -8,9 +8,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.engine import get_db
+from app.models.booking_media import BookingMedia
 from app.models.enums import ActorType, BookingStatus
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.booking_repo import BookingRepository
@@ -73,6 +75,12 @@ async def get_booking(booking_id: uuid.UUID, db: AsyncSession = Depends(get_db))
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     client = await client_repo.get_by_id(booking.client_id)
+    media_result = await db.execute(
+        select(BookingMedia).where(BookingMedia.booking_id == booking_id)
+    )
+    media_items = media_result.scalars().all()
+
+    has_receipt = any(item.is_receipt for item in media_items)
     return {
         "id": str(booking.id),
         "status": booking.status.value,
@@ -103,6 +111,8 @@ async def get_booking(booking_id: uuid.UUID, db: AsyncSession = Depends(get_db))
         "completed_at": booking.completed_at.isoformat() if booking.completed_at else None,
         "created_at": booking.created_at.isoformat(),
         "updated_at": booking.updated_at.isoformat(),
+        "media_count": len(media_items),
+        "has_receipt": has_receipt,
     }
 
 
@@ -238,6 +248,26 @@ async def cancel_booking(
     if errors:
         raise HTTPException(status_code=422, detail=errors)
     return {"booking_id": str(booking_id), "status": booking.status.value}
+
+
+@router.post("/bookings/{booking_id}/incall-address-sent")
+async def mark_incall_address_sent(
+    booking_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    svc = BookingService(db)
+    booking, errors = await svc.mark_incall_address_sent(
+        booking_id=booking_id,
+        actor_type=ActorType.ADMIN,
+    )
+    if errors:
+        raise HTTPException(status_code=422, detail=errors)
+    return {
+        "booking_id": str(booking_id),
+        "incall_address_sent_at": booking.incall_address_sent_at.isoformat()
+        if booking and booking.incall_address_sent_at
+        else None,
+    }
 
 
 @router.patch("/bookings/{booking_id}")

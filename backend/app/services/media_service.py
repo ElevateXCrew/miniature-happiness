@@ -4,10 +4,12 @@ Media ingestion and receipt classification service.
 
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.audit_event import AuditEvent
 from app.models.booking_media import BookingMedia
-from app.models.enums import Channel
+from app.models.enums import ActorType, Channel
 from app.repositories.booking_repo import BookingRepository
 from app.repositories.session_repo import SessionRepository
 
@@ -37,24 +39,51 @@ class MediaService:
             if session and session.active_booking_id:
                 booking_id = session.active_booking_id
 
+        normalized_source_url = source_url.strip()
+        normalized_media_type = media_type.strip().lower() if media_type else None
+        inferred_receipt = self._looks_like_receipt(
+            source_url=normalized_source_url,
+            media_type=normalized_media_type,
+            twilio_media_sid=twilio_media_sid,
+        )
+
         media = BookingMedia(
             client_id=client_id,
             booking_id=booking_id,
             session_id=session_id,
             channel=channel,
-            media_type=media_type,
+            media_type=normalized_media_type,
             twilio_media_sid=twilio_media_sid,
-            source_url=source_url,
+            source_url=normalized_source_url,
+            is_receipt=inferred_receipt,
         )
         self.db.add(media)
+        await self.db.flush()
+
+        self.db.add(
+            AuditEvent(
+                entity_type="booking_media",
+                entity_id=media.id,
+                event_type="media_attached",
+                actor_type=ActorType.SYSTEM,
+                metadata_={
+                    "client_id": str(client_id),
+                    "session_id": str(session_id),
+                    "booking_id": str(booking_id) if booking_id else None,
+                    "channel": channel.value,
+                    "media_type": normalized_media_type,
+                    "twilio_media_sid": twilio_media_sid,
+                    "source_url": normalized_source_url,
+                    "is_receipt": inferred_receipt,
+                },
+            )
+        )
         await self.db.flush()
         return media
 
     async def mark_as_receipt(
         self, media_id: uuid.UUID, booking_id: uuid.UUID | None = None
     ) -> BookingMedia | None:
-        from sqlalchemy import select
-
         result = await self.db.execute(select(BookingMedia).where(BookingMedia.id == media_id))
         media = result.scalar_one_or_none()
         if not media:
@@ -64,4 +93,46 @@ class MediaService:
             media.booking_id = booking_id
         self.db.add(media)
         await self.db.flush()
+
+        self.db.add(
+            AuditEvent(
+                entity_type="booking_media",
+                entity_id=media.id,
+                event_type="media_marked_receipt",
+                actor_type=ActorType.SYSTEM,
+                metadata_={
+                    "booking_id": str(media.booking_id) if media.booking_id else None,
+                    "source_url": media.source_url,
+                },
+            )
+        )
+        await self.db.flush()
         return media
+
+    async def has_receipt_for_booking(self, booking_id: uuid.UUID) -> bool:
+        result = await self.db.execute(
+            select(BookingMedia.id).where(
+                BookingMedia.booking_id == booking_id,
+                BookingMedia.is_receipt.is_(True),
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    def _looks_like_receipt(
+        self,
+        *,
+        source_url: str,
+        media_type: str | None,
+        twilio_media_sid: str | None,
+    ) -> bool:
+        receipt_markers = ("receipt", "proof", "advance", "payment", "bank", "transfer")
+        haystacks: list[str] = [source_url.lower()]
+        if media_type:
+            haystacks.append(media_type.lower())
+        if twilio_media_sid:
+            haystacks.append(twilio_media_sid.lower())
+
+        for marker in receipt_markers:
+            if any(marker in value for value in haystacks):
+                return True
+        return False

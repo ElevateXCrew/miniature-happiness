@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.booking import Booking
-from app.models.enums import BookingStatus
+from app.models.enums import BookingStatus, BookingType
 from app.services.availability_service import AvailabilityService
 
 
@@ -30,6 +30,7 @@ async def _create_confirmed_booking(
         worker_id=worker_id,
         session_id=session_id,
         status=BookingStatus.CONFIRMED,
+        booking_type=BookingType.INCALL,
         scheduled_start_at=start,
         duration_minutes=duration_minutes,
         scheduled_end_at=start + timedelta(minutes=duration_minutes),
