@@ -1,10 +1,17 @@
 # IMPLEMENTAION_PLAN
 
-This plan is the execution blueprint for building the AI-powered booking assistant for a UK-based escort agency with a single worker (`Alysha`), dual client channels (Twilio SMS + Twilio WhatsApp), FastAPI orchestration, OpenAI LLM, PostgreSQL, and Next.js admin panel.
+This file is the single execution source of truth for project planning.
+
+## Current Status
+
+- Phase 1 through Phase 5 are complete on backend scope.
+- Deterministic FastAPI orchestration, Twilio SMS/WhatsApp flows, booking lifecycle, media rules, reminders, reliability hardening, and metrics are implemented.
+- Backend quality gate is green: `ruff check .`, `mypy app`, and `pytest` pass.
+- Active implementation focus is now Phase 6 (Next.js Admin Panel + RBAC + worker portal access controls).
 
 ## Scope Locks (Agreed)
 
-- Worker model: single active worker (`Alysha`) for now.
+- Worker model: single active worker persona (`Alysha`) for now.
 - Channels: SMS and WhatsApp with separate system instructions.
 - Persona: assistant always speaks as Alysha; never as "an AI assistant".
 - Reply style: short, natural, 1-2 lines unless detail is explicitly required.
@@ -16,117 +23,117 @@ This plan is the execution blueprint for building the AI-powered booking assista
   - Media can be received and linked to client/booking.
   - If client is on SMS and media is needed, ask to send media on WhatsApp using same number.
 - Reminders: 20 minutes before booking to admin, worker, and client with type-specific wording.
+- Auth model: role-based with exactly two roles (`admin`, `worker`) using JWT access/refresh tokens.
+- Admin can toggle worker section access (example: disable `live_chat`, worker cannot see/use it).
 
-## Phase 1 (Base Foundation) - Mandatory First Phase
+## Completed Phases (1-5)
 
-Goal: establish deterministic backend foundation that all later features depend on.
+### Phase 1 (Base Foundation) - Complete
 
-### Step-by-step
+Goal: deterministic backend foundation with DB schema, state machine, and tool contracts.
 
-1. Bootstrap FastAPI project structure (`app/` with modular routers and services).
-2. Configure PostgreSQL connection, migrations, and base models.
-3. Implement normalized client identity with unique `phone_e164`.
-4. Implement core entities: client, worker, conversation_session, booking, booking_media, notification, audit_event.
-5. Implement enums/state fields for conversation and booking lifecycle.
-6. Implement transaction-safe slot availability logic with 15-minute buffer.
-7. Implement idempotency support for inbound message events.
-8. Add internal service interfaces for deterministic tools (no LLM required yet).
-9. Add health/readiness endpoints and baseline logging.
+### Phase 2 (Channels + Agent Orchestration) - Complete
 
-### Exit criteria
+Goal: Twilio SMS/WhatsApp ingestion and LLM orchestration with deterministic fallback.
 
-- DB migrations run cleanly.
-- Deterministic booking lifecycle works via API tests without LLM.
-- Double booking is blocked by backend logic.
-- Session and booking state transitions are persisted and queryable.
+### Phase 3 (Lifecycle + Sync + Decisions) - Complete
 
-## Phase 2 (Channels + Agent Orchestration)
+Goal: admin/worker action APIs, timeline/sync, and client decision messaging.
 
-Goal: connect Twilio channels to agent orchestration and tool execution.
+### Phase 4 (Media + Booking Branch Rules) - Complete
 
-### Step-by-step
+Goal: receipt/media enrichment, outcall/incall enforcement, and reminder template hardening.
 
-1. Implement Twilio webhooks for SMS and WhatsApp.
-2. Parse inbound payloads and normalize phone to E.164.
-3. Resolve/create client profile from phone.
-4. Load channel-specific system instruction text files.
-5. Build LLM orchestration layer with strict tool-calling pattern.
-6. Implement assistant responses constrained by style/persona rules.
-7. Enforce field collection order from backend state machine.
-8. Implement cross-channel continuity by phone identity.
-9. Persist complete conversation history with tool call traces.
+### Phase 5 (Reliability + UAT Prep) - Complete
 
-### Exit criteria
+Goal: dedup, out-of-order handling, retries/dead-letter, metrics, race-condition coverage.
 
-- Same client can start on SMS and continue on WhatsApp.
-- "Hi" starts casual short flow; booking flow starts only on intent.
-- Availability checks are tool-driven and deterministic.
+## Phase 6 (Admin Panel + RBAC + Worker Portal) - Active
 
-## Phase 3 (Booking Lifecycle + Admin Panel + Worker Commands)
+Goal: deliver production-grade Next.js control panel and worker portal with server-enforced role/section permissions.
 
-Goal: end-to-end booking approval workflow with admin and worker control surfaces.
+This phase directly implements the admin expectations in `AI Booking Assistant_ Features and Flow.md` sections:
+- Admin Review
+- Admin Controls
+- Pause/Resume Behavior
+- Reminder Behavior
+- Live visibility of ongoing conversations.
 
-### Step-by-step
+### Track 0 - Auth and RBAC foundation (must run first)
 
-1. Build Next.js admin authentication shell and booking queue UI.
-2. Implement admin booking actions (approve/reject/cancel/edit).
-3. Build worker command endpoints (mobile-app-ready API).
-4. Implement event broadcasting (websocket/SSE) for admin sync updates.
-5. Implement client-facing status messaging after decisions.
-6. Add timeline view per booking (messages, media, status changes).
-7. Add worker commands like "free now" and "complete early".
+1. Add auth entities and migrations (`users`, `worker_section_permissions`).
+2. Implement JWT login/refresh/logout/me endpoints.
+3. Implement permission service for section-level access checks.
+4. Add audit events for all permission changes.
+5. Add backend guards so disabled sections return `403` even on direct API call.
 
-### Exit criteria
+Exit criteria:
+- Admin and worker authentication works with JWT access + refresh.
+- Worker effective sections are queryable via API.
+- Disabled section requests are denied server-side.
 
-- Admin actions update booking state and client is informed.
-- Worker actions sync admin panel in near real-time.
-- Worker command endpoints are stable and documented for mobile app integration.
+### Track 1 - Next.js shell, role-aware routing, and guarded navigation
 
-## Phase 4 (Media + Incall/Outcall Rules + Notifications)
+1. Scaffold Next.js app with authenticated layouts.
+2. Build role-aware sidebar and route guards.
+3. Fetch effective section permissions at login/session restore.
+4. Hide worker-disabled sections from navigation and routes.
 
-Goal: enforce booking-type-specific logic and complete media/notification operations.
+Exit criteria:
+- Admin sees all sections.
+- Worker only sees allowed sections.
+- Disabled route navigation is blocked in UI.
 
-### Step-by-step
+### Track 2 - Admin core screens and controls
 
-1. Implement media ingestion and storage metadata (link to client and booking or pending session).
-2. Implement incall/outcall branch rules:
-   - Incall: send location at allowed stage.
-   - Outcall: require client address + transport advance + receipt.
-3. Build notification center backend for admin.
-4. Implement booking reminder scheduler at T-20 minutes.
-5. Implement channel-specific reminder templates.
-6. Ensure outcall reminders use "I am about to arrive" style and incall uses "Are you coming" style.
+1. Dashboard with pending reviews and reliability highlights.
+2. Booking queue with filters (`status`, `offset`, `limit`).
+3. Booking detail + timeline (messages, media, audit, notifications).
+4. Media/receipt review panel.
+5. Active sessions monitor + pause/resume controls.
+6. Notification center (pending review/reminder/retry/dead-letter visibility).
 
-### Exit criteria
+Exit criteria:
+- Admin can run full booking lifecycle from UI.
+- Receipt inspection and conversation timeline are available per booking.
+- Agent pause/resume controls work from panel.
 
-- Media appears in admin panel under correct client/booking context.
-- Outcall cannot proceed to ready state without required advance flow.
-- 20-minute reminders trigger correctly for all parties.
+### Track 3 - Worker portal (permission-aware)
 
-## Phase 5 (Reliability Hardening + UAT + Launch Readiness)
+1. Worker home and upcoming bookings screen.
+2. Worker actions: approve/reject, complete early, free-now availability command.
+3. Worker notifications/reminders view.
+4. Enforce section toggles from admin (for dashboard/live chat/etc).
 
-Goal: stabilize behavior under real-world messaging conditions and edge cases.
+Exit criteria:
+- Worker can complete allowed operational actions.
+- Worker cannot see or execute disabled sections/actions.
 
-### Step-by-step
+### Track 4 - Realtime sync and launch hardening
 
-1. Add message deduplication and out-of-order handling.
-2. Add retry queues and dead-letter handling for failed outbound sends.
-3. Add comprehensive audit logs for booking state transitions and tool executions.
-4. Add edge-case test matrix execution (channel switch, edits after summary, race conditions).
-5. Add dashboards/metrics (pending reviews, failed tool calls, reminder failures).
-6. Conduct UAT and produce go-live checklist.
+1. Integrate admin SSE stream for booking/notification/status updates.
+2. Push permission-change refresh signal to worker sessions.
+3. Add RBAC negative tests and end-to-end UI permission tests.
+4. Extend UAT launch checklist for admin panel and auth/rbac flows.
 
-### Exit criteria
+Exit criteria:
+- Worker/admin decisions sync in near real time.
+- Permission changes propagate immediately.
+- RBAC and panel workflows pass regression/UAT.
 
-- No duplicate booking creation from webhook retries.
-- Slot conflicts remain blocked under concurrent requests.
-- Core scenarios and edge cases pass UAT.
+## Phase 6 Execution Order (Do Not Skip)
 
-## Build Order Checklist (Immediate Next Actions)
+1. Implement backend auth + RBAC data model and APIs.
+2. Add backend authorization guards on protected endpoints.
+3. Build Next.js authenticated app shell and route/menu guards.
+4. Implement admin screens and worker portal features.
+5. Integrate SSE sync and notification updates.
+6. Run full quality gate and UAT checklist updates.
 
-1. Create backend project skeleton and migrations.
-2. Implement DB schema from `docs/DB_SCHEMA.md`.
-3. Implement state machine from `docs/STATE_MACHINE.md`.
-4. Implement tool service contracts from `docs/TOOL_CATALOG.md`.
-5. Implement API routes from `docs/API_ENDPOINTS.md`.
-6. Integrate channel instructions from `prompts/*.txt`.
+## Immediate Next Actions
+
+1. Finalize docs sync for Phase 6 (`DB_SCHEMA`, `API_ENDPOINTS`, `WORKFLOWS`, `ARCHITECTURE`, `AGENTS`).
+2. Add backend migrations for auth + section permissions.
+3. Implement FastAPI auth and permission middleware/dependencies.
+4. Scaffold Next.js admin app and wire auth session handling.
+5. Implement section visibility controls in admin UI and enforcement tests.

@@ -11,6 +11,37 @@ This schema is implementation-oriented and optimized for deterministic state tra
 
 ## Tables
 
+### users
+
+- `id` (uuid, pk)
+- `email` (text, not null, unique)
+- `password_hash` (text, not null)
+- `role` (enum: `admin`, `worker`, not null)
+- `is_active` (boolean, not null, default true)
+- `last_login_at` (timestamptz, null)
+- `created_at` (timestamptz, not null)
+- `updated_at` (timestamptz, not null)
+
+Indexes:
+- unique index on `email`
+
+### worker_section_permissions
+
+- `id` (uuid, pk)
+- `worker_user_id` (uuid, fk users.id, not null)
+- `section_key` (enum, not null)
+- `can_view` (boolean, not null, default true)
+- `updated_by_user_id` (uuid, fk users.id, null)
+- `created_at` (timestamptz, not null)
+- `updated_at` (timestamptz, not null)
+
+Unique:
+- `(worker_user_id, section_key)`
+
+Rules:
+- Section permissions are only meaningful for users with role `worker`.
+- Backend authorization MUST enforce section access (UI hiding alone is not sufficient).
+
 ### workers
 
 - `id` (uuid, pk)
@@ -143,3 +174,5 @@ Unique:
 
 - `conversation_state`: `IDLE`, `COLLECTING`, `AWAITING_CLIENT_CONFIRMATION`, `WAITING_REVIEW`, `PAUSED`, `HANDOFF`, `ERROR_REVIEW`
 - `booking_status`: `DRAFT`, `PENDING_REVIEW`, `CONFIRMED`, `REJECTED`, `CANCELLED`, `COMPLETED`
+- `user_role`: `admin`, `worker`
+- `section_key`: `dashboard`, `live_chat`, `bookings`, `timeline`, `media`, `notifications`, `schedule`, `settings`

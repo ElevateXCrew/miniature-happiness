@@ -38,3 +38,27 @@
 2. Creates reminders for admin, worker, client.
 3. Client template differs by booking type (incall vs outcall).
 4. Notification status tracked and retried on failure.
+
+## 5) Admin Toggles Worker Section Access
+
+1. Admin opens worker access controls in panel.
+2. Admin disables a section (example: `live_chat`) for a worker user.
+3. Backend updates `worker_section_permissions` and writes audit event.
+4. Backend emits realtime permission update event.
+5. Worker UI hides disabled section immediately.
+6. Any direct API call to disabled section returns `403`.
+
+## 6) Admin/Worker Login and Guarded Navigation
+
+1. User logs in via `/auth/login` and receives JWT access + refresh tokens.
+2. UI calls `/auth/me` and `/ui/sections` during session bootstrap.
+3. Admin receives full navigation; worker receives permission-limited navigation.
+4. Route guards block unauthorized pages before render.
+5. Backend authorization still enforces role/section checks for all protected APIs.
+
+## 7) Worker Decision Sync to Admin Panel
+
+1. Worker approves/rejects/completes a booking from worker interface.
+2. Backend updates booking state and creates deterministic notifications.
+3. Admin SSE stream emits booking update event.
+4. Admin queue/detail/timeline refreshes without manual reload.
