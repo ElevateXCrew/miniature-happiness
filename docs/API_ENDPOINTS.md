@@ -25,10 +25,13 @@ Notes:
 
 - `GET /admin/bookings` (supports `status`, `offset`, `limit` query params)
 - `GET /admin/bookings/{booking_id}`
+  - Includes `media_count` and `has_receipt` flags in booking detail payload.
 - `GET /admin/bookings/{booking_id}/timeline`
 - `POST /admin/bookings/{booking_id}/approve`
 - `POST /admin/bookings/{booking_id}/reject`
 - `POST /admin/bookings/{booking_id}/cancel`
+- `POST /admin/bookings/{booking_id}/incall-address-sent`
+  - Marks `incall_address_sent_at` after a confirmed incall booking.
 - `PATCH /admin/bookings/{booking_id}`
 - `GET /admin/sessions/active`
 - `GET /admin/notifications`
@@ -48,6 +51,7 @@ Notes:
 ## Media APIs
 
 - `POST /media/twilio/ingest`
+  - Returns enriched media metadata (`booking_id`, `channel`, `media_type`, `twilio_media_sid`, `is_receipt`, `source_url`).
 - `GET /admin/bookings/{booking_id}/media`
 - `POST /admin/media/{media_id}/mark-receipt`
 
@@ -55,6 +59,8 @@ Notes:
 
 - `POST /notifications/dispatch`
 - `POST /notifications/reminders/run`
+  - If `booking_id` provided: schedules reminders for that booking only.
+  - If omitted: schedules reminders for confirmed bookings in the T-20 window and returns counts.
 
 ## Realtime Sync
 

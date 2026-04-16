@@ -301,7 +301,13 @@ class ToolRunner:
         )
         if not media:
             return _err(f"Media {media_id} not found.")
-        return _ok({"media_id": media_id, "is_receipt": media.is_receipt})
+        return _ok(
+            {
+                "media_id": media_id,
+                "booking_id": str(media.booking_id) if media.booking_id else None,
+                "is_receipt": media.is_receipt,
+            }
+        )
 
     # ------------------------------------------------------------------
     # 7. Notifications and Reminders

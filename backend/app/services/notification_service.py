@@ -79,6 +79,20 @@ class NotificationService:
             send_at = now
 
         is_outcall = booking.booking_type == BookingType.OUTCALL
+        existing = await self.repo.list_for_booking(booking_id)
+        if any(
+            n.template_key
+            in {
+                "booking_reminder_admin",
+                "booking_reminder_worker_outcall",
+                "booking_reminder_worker_incall",
+                "booking_reminder_client_outcall",
+                "booking_reminder_client_incall",
+            }
+            for n in existing
+        ):
+            return []
+
         created: list[Notification] = []
 
         # Admin reminder
@@ -86,7 +100,11 @@ class NotificationService:
             target_type=NotificationTargetType.ADMIN,
             target_ref="admin",
             template_key="booking_reminder_admin",
-            payload={"booking_id": str(booking_id)},
+            payload={
+                "booking_id": str(booking_id),
+                "booking_type": booking.booking_type.value if booking.booking_type else None,
+                "style_hint": "ops_t_minus_20",
+            },
             send_at=send_at,
             booking_id=booking_id,
             channel=NotificationChannel.IN_APP,
@@ -101,7 +119,11 @@ class NotificationService:
             target_type=NotificationTargetType.WORKER,
             target_ref=str(booking.worker_id),
             template_key=worker_template,
-            payload={"booking_id": str(booking_id)},
+            payload={
+                "booking_id": str(booking_id),
+                "booking_type": booking.booking_type.value if booking.booking_type else None,
+                "style_hint": "i_am_about_to_arrive" if is_outcall else "are_you_coming",
+            },
             send_at=send_at,
             booking_id=booking_id,
             channel=NotificationChannel.WHATSAPP,
@@ -123,7 +145,11 @@ class NotificationService:
             target_type=NotificationTargetType.CLIENT,
             target_ref=str(booking.client_id),
             template_key=client_template,
-            payload={"booking_id": str(booking_id)},
+            payload={
+                "booking_id": str(booking_id),
+                "booking_type": booking.booking_type.value if booking.booking_type else None,
+                "style_hint": "i_am_about_to_arrive" if is_outcall else "are_you_coming",
+            },
             send_at=send_at,
             booking_id=booking_id,
             channel=client_channel,
@@ -204,6 +230,29 @@ class NotificationService:
                 channel=NotificationChannel.IN_APP,
             )
         ]
+
+    async def schedule_due_booking_reminders(
+        self,
+        *,
+        now: datetime | None = None,
+        minutes_before: int = settings.reminder_minutes_before,
+    ) -> dict[str, int]:
+        reference_now = now or datetime.now(UTC)
+        cutoff = reference_now + timedelta(minutes=minutes_before)
+        candidates = await self.booking_repo.list_confirmed_starting_before(cutoff)
+
+        created_total = 0
+        for booking in candidates:
+            created = await self.schedule_booking_reminders(
+                booking_id=booking.id,
+                minutes_before=minutes_before,
+            )
+            created_total += len(created)
+
+        return {
+            "bookings_considered": len(candidates),
+            "notifications_created": created_total,
+        }
 
     async def send_client_message(
         self,

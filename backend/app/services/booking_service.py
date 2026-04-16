@@ -6,6 +6,7 @@ All state changes go through here — never set booking.status directly outside 
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,7 @@ from app.repositories.client_repo import ClientRepository
 from app.repositories.session_repo import SessionRepository
 from app.services.availability_service import AvailabilityService
 from app.services.event_stream import admin_event_stream
+from app.services.media_service import MediaService
 from app.services.notification_service import NotificationService
 
 # Required field collection order (matches STATE_MACHINE.md)
@@ -47,6 +49,7 @@ class BookingService:
         self.audit = AuditRepository(db)
         self.availability = AvailabilityService(db)
         self.notifications = NotificationService(db)
+        self.media = MediaService(db)
 
     # ------------------------------------------------------------------
     # Field inspection
@@ -147,13 +150,27 @@ class BookingService:
             booking.outcall_address = str(field_value).strip()
 
         elif field_name == "price_total_gbp":
-            booking.price_total_gbp = field_value  # type: ignore[assignment]
+            try:
+                booking.price_total_gbp = Decimal(str(field_value))
+            except (InvalidOperation, ValueError):
+                errors.append("Price total must be a valid GBP amount.")
+                return booking, errors
 
         elif field_name == "advance_required_gbp":
-            booking.advance_required_gbp = field_value  # type: ignore[assignment]
+            try:
+                amount = Decimal(str(field_value))
+            except (InvalidOperation, ValueError):
+                errors.append("Advance required must be a valid GBP amount.")
+                return booking, errors
+            booking.advance_required_gbp = amount
 
         elif field_name == "advance_received":
             booking.advance_received = bool(field_value)
+
+        elif field_name == "incall_address_sent_at":
+            if isinstance(field_value, str):
+                field_value = datetime.fromisoformat(field_value)
+            booking.incall_address_sent_at = field_value
 
         else:
             errors.append(f"Unknown field: {field_name}")
@@ -206,6 +223,17 @@ class BookingService:
             return booking, validation.errors or [
                 f"Missing required field: {validation.next_required_field}"
             ]
+
+        if booking.scheduled_start_at is None or booking.duration_minutes is None:
+            return booking, ["Missing required scheduling fields."]
+
+        booking_type_errors = self._validate_booking_type_present(booking)
+        if booking_type_errors:
+            return booking, booking_type_errors
+
+        outcall_errors = await self._validate_outcall_requirements(booking)
+        if outcall_errors:
+            return booking, outcall_errors
 
         # Re-check availability
         avail = await self.availability.check(
@@ -273,6 +301,10 @@ class BookingService:
 
         if status == BookingStatus.CONFIRMED:
             booking.confirmed_at = now
+            if booking.scheduled_start_at is None or booking.duration_minutes is None:
+                booking.status = BookingStatus.PENDING_REVIEW
+                booking.confirmed_at = None
+                return booking, ["Booking is missing scheduling data for confirmation."]
             # Re-check availability one final time
             avail = await self.availability.check(
                 worker_id=booking.worker_id,
@@ -283,6 +315,12 @@ class BookingService:
             if not avail.available:
                 booking.status = BookingStatus.PENDING_REVIEW  # rollback
                 return booking, [avail.conflict_reason or "Slot conflict at confirmation."]
+
+            confirmation_errors = await self._validate_confirmation_requirements(booking)
+            if confirmation_errors:
+                booking.status = BookingStatus.PENDING_REVIEW
+                booking.confirmed_at = None
+                return booking, confirmation_errors
 
             await self._update_session_on_terminal(booking, ConversationState.IDLE)
 
@@ -311,6 +349,8 @@ class BookingService:
             actor_type=actor_type,
             note=note,
         )
+        if status == BookingStatus.CONFIRMED:
+            await self.notifications.schedule_booking_reminders(booking.id)
         await self._send_client_decision_message(booking, status)
         admin_event_stream.publish(
             "booking.status_changed",
@@ -392,3 +432,74 @@ class BookingService:
                 "origin": "booking_decision",
             },
         )
+
+    async def mark_incall_address_sent(
+        self,
+        booking_id: uuid.UUID,
+        actor_type: ActorType,
+        actor_ref: str | None = None,
+    ) -> tuple[Any, list[str]]:
+        booking = await self.repo.get_by_id(booking_id)
+        if not booking:
+            return None, ["Booking not found."]
+
+        from app.models.enums import BookingType
+
+        if booking.booking_type != BookingType.INCALL:
+            return booking, ["Incall address can only be sent for incall bookings."]
+        if booking.status != BookingStatus.CONFIRMED:
+            return booking, ["Incall address can only be sent after booking confirmation."]
+        if booking.incall_address_sent_at is not None:
+            return booking, []
+
+        booking.incall_address_sent_at = datetime.now(UTC)
+        await self.repo.save(booking)
+        await self.audit.log(
+            entity_type="booking",
+            entity_id=booking_id,
+            event_type="incall_address_sent",
+            actor_type=actor_type,
+            actor_ref=actor_ref,
+            metadata={},
+        )
+        admin_event_stream.publish(
+            "booking.incall_address_sent",
+            {
+                "booking_id": str(booking.id),
+                "incall_address_sent_at": booking.incall_address_sent_at.isoformat(),
+            },
+        )
+        return booking, []
+
+    async def _validate_outcall_requirements(self, booking: Any) -> list[str]:
+        from app.models.enums import BookingType
+
+        if booking.booking_type != BookingType.OUTCALL:
+            return []
+
+        errors: list[str] = []
+        if not (booking.outcall_address or "").strip():
+            errors.append("Outcall address is required for outcall bookings.")
+        if booking.advance_required_gbp is None:
+            errors.append("Advance amount is required for outcall bookings.")
+        if booking.advance_required_gbp is not None and booking.advance_required_gbp <= 0:
+            errors.append("Advance amount must be greater than 0 for outcall bookings.")
+        return errors
+
+    async def _validate_confirmation_requirements(self, booking: Any) -> list[str]:
+        from app.models.enums import BookingType
+
+        if booking.booking_type != BookingType.OUTCALL:
+            return []
+
+        if not booking.advance_received:
+            return ["Outcall booking cannot be confirmed before advance is received."]
+        has_receipt = await self.media.has_receipt_for_booking(booking.id)
+        if not has_receipt:
+            return ["Outcall booking cannot be confirmed without a receipt image."]
+        return []
+
+    def _validate_booking_type_present(self, booking: Any) -> list[str]:
+        if booking.booking_type is None:
+            return ["Booking type must be set to incall or outcall before review."]
+        return []

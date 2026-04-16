@@ -43,7 +43,15 @@ async def ingest_media(payload: TwilioMediaPayload, db: AsyncSession = Depends(g
         twilio_media_sid=payload.twilio_media_sid,
         booking_id=payload.booking_id,
     )
-    return {"media_id": str(media.id), "is_receipt": media.is_receipt}
+    return {
+        "media_id": str(media.id),
+        "booking_id": str(media.booking_id) if media.booking_id else None,
+        "channel": media.channel.value,
+        "media_type": media.media_type,
+        "twilio_media_sid": media.twilio_media_sid,
+        "is_receipt": media.is_receipt,
+        "source_url": media.source_url,
+    }
 
 
 @router.get("/admin/bookings/{booking_id}/media")

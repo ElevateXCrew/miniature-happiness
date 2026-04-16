@@ -75,6 +75,16 @@ class BookingRepository:
         )
         return list(result.scalars().all())
 
+    async def list_confirmed_starting_before(self, at_or_before: datetime) -> list[Booking]:
+        result = await self.db.execute(
+            select(Booking).where(
+                Booking.status == BookingStatus.CONFIRMED,
+                Booking.scheduled_start_at.is_not(None),
+                Booking.scheduled_start_at <= at_or_before,
+            )
+        )
+        return list(result.scalars().all())
+
     async def list_for_admin_queue(
         self,
         status: BookingStatus | None = None,

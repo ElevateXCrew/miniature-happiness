@@ -2,10 +2,10 @@
 
 ## Current Repo Reality
 
-- **Phase 1 + Phase 2 + Phase 3 Complete:** deterministic backend, Twilio SMS/WhatsApp orchestration, admin lifecycle APIs, worker sync flows, and client decision messaging are implemented.
-- Conversation flow now supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
-- Current backend test status: **24 passing tests**.
-- Next delivery target: **Phase 4** (media rules + incall/outcall enforcement + reminder operations hardening).
+- **Phase 1 + Phase 2 + Phase 3 + Phase 4 Complete:** deterministic backend, Twilio SMS/WhatsApp orchestration, admin lifecycle APIs, worker sync flows, client decision messaging, media enrichment, branch constraints, and reminder hardening are implemented.
+- Conversation flow supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
+- Current backend test status: **29 passing tests**.
+- Next delivery target: **Phase 5** (reliability hardening + UAT + launch readiness).
 
 ## Source-of-Truth Files (Read First)
 
@@ -81,17 +81,28 @@
 - ✅ Deterministic review/decision notifications plus client-facing decision messaging on active channel
 - ✅ Phase 3 regression test module added (`backend/tests/test_phase3_lifecycle.py`)
 
-**Next Phase (Phase 4):**
-- Implement strict media ingestion enrichment and receipt classification behavior
-- Enforce incall/outcall branch constraints (including outcall advance + receipt gating)
-- Finalize reminder operations and channel/template correctness at T-20 across admin/worker/client
+**Phase 4 Summary (Completed):**
+- ✅ Media ingestion enrichment now links assets to active booking context and captures stronger media metadata
+- ✅ Receipt classification flow implemented with deterministic booking linkage and admin/timeline visibility
+- ✅ Outcall branch enforcement added: requires outcall address + positive advance amount before review
+- ✅ Outcall confirmation hard-gated on `advance_received` plus receipt evidence
+- ✅ Incall location lifecycle support added (`incall_address_sent_at`) via admin endpoint
+- ✅ Reminder operations hardened with T-20 scheduler path, duplicate protection, and incall/outcall style hints
+- ✅ API docs updated and regression coverage expanded to 29 passing backend tests
+
+**Next Phase (Phase 5):**
+- Implement inbound out-of-order handling and stronger idempotency guarantees
+- Add outbound retry queues + dead-letter handling for failed sends
+- Expand failure telemetry/metrics for reminders, Twilio sends, and tool execution paths
+- Add race-condition and resilience tests across booking lifecycle and channel transitions
+- Produce UAT checklist and launch readiness sign-off artifacts
 
 ## Implementation Order (Do Not Skip)
 
 - Start with Phase 1 from `IMPLEMENTAION_PLAN.md` before channel/LLM/admin work.
 - Implement DB schema + state machine + deterministic tool services first.
 - Add Twilio/LLM orchestration only after deterministic backend behaviors are testable.
-- **Phase 1, Phase 2, and Phase 3 are complete.** Next: Proceed with Phase 4.
+- **Phase 1 through Phase 4 are complete.** Next: Proceed with Phase 5.
 
 ## AI Agent Roles for Phase 3+
 
@@ -116,11 +127,13 @@ Use these focused agent roles when parallelizing implementation work for upcomin
    - Owns media ingestion enrichment and incall/outcall branch enforcement.
    - Implements strict outcall advance + receipt gating and WhatsApp handoff behavior.
    - Must verify media links appear correctly in booking timeline/admin detail surfaces.
+   - Status: phase ownership complete; keep for regressions only.
 
 5. **phase4-reminder-template-agent**
    - Owns reminder scheduling and template correctness at T-20 for admin/worker/client.
    - Verifies incall/outcall wording divergence and channel mapping.
    - Must validate reminder behavior through both API-triggered and scheduler-triggered paths.
+   - Status: phase ownership complete; keep for regressions only.
 
 6. **phase5-reliability-agent**
    - Owns dedup/out-of-order handling, retry/dead-letter behavior, and failure metrics.
