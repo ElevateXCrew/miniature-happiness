@@ -65,7 +65,7 @@ async def _handle_twilio_channel(
         media_items=_parse_media(form_data),
     )
 
-    twiml = gateway.to_twiml(None if result.duplicate else result.response_text)
+    twiml = gateway.to_twiml(result.response_text)
     return Response(content=twiml, media_type="application/xml")
 
 

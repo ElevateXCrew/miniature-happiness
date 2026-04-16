@@ -8,7 +8,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import admin, agent, events, health, media, notifications, twilio, worker
+from app.api.routers import (
+    admin,
+    agent,
+    events,
+    health,
+    media,
+    metrics,
+    notifications,
+    twilio,
+    worker,
+)
 from app.core.config import settings
 from app.core.logging import configure_logging, logger
 from app.db.engine import engine
@@ -68,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(worker.router)
     app.include_router(media.router)
     app.include_router(notifications.router)
+    app.include_router(metrics.router)
     app.include_router(events.router)
     app.include_router(twilio.router)
     app.include_router(agent.router)

@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import ActorType, AwaitingReviewFrom, BookingStatus, ConversationState
+from app.core import metrics
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.booking_repo import BookingRepository
 from app.repositories.client_repo import ClientRepository
@@ -349,6 +350,7 @@ class BookingService:
             actor_type=actor_type,
             note=note,
         )
+        metrics.incr("booking_status_transitions_total")
         if status == BookingStatus.CONFIRMED:
             await self.notifications.schedule_booking_reminders(booking.id)
         await self._send_client_decision_message(booking, status)

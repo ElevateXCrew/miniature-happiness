@@ -34,12 +34,14 @@ class SessionRepository:
         client_id: uuid.UUID,
         worker_id: uuid.UUID,
         channel: Channel,
+        update_last_inbound_at: bool = True,
     ) -> tuple[ConversationSession, bool]:
         existing = await self.get_active_for_client_worker(client_id, worker_id)
         if existing:
             # Update last channel
             existing.last_channel = channel
-            existing.last_inbound_at = datetime.now(UTC)
+            if update_last_inbound_at:
+                existing.last_inbound_at = datetime.now(UTC)
             self.db.add(existing)
             await self.db.flush()
             return existing, False
@@ -49,7 +51,7 @@ class SessionRepository:
             worker_id=worker_id,
             state=ConversationState.IDLE,
             last_channel=channel,
-            last_inbound_at=datetime.now(UTC),
+            last_inbound_at=datetime.now(UTC) if update_last_inbound_at else None,
         )
         self.db.add(session)
         await self.db.flush()

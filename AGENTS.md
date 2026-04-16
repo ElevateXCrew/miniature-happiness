@@ -2,10 +2,10 @@
 
 ## Current Repo Reality
 
-- **Phase 1 + Phase 2 + Phase 3 + Phase 4 Complete:** deterministic backend, Twilio SMS/WhatsApp orchestration, admin lifecycle APIs, worker sync flows, client decision messaging, media enrichment, branch constraints, and reminder hardening are implemented.
+- **Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 Complete:** deterministic backend, Twilio SMS/WhatsApp orchestration, admin lifecycle APIs, worker sync flows, client decision messaging, media enrichment, branch constraints, reminder hardening, and reliability controls are implemented.
 - Conversation flow supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
-- Current backend test status: **29 passing tests**.
-- Next delivery target: **Phase 5** (reliability hardening + UAT + launch readiness).
+- Current backend test status: **34 passing tests**.
+- Phase 5 reliability hardening is implemented (dedup/out-of-order handling, retry/dead-letter, metrics, resilience tests).
 
 ## Source-of-Truth Files (Read First)
 
@@ -61,9 +61,10 @@
 - `backend/app/repositories/` — 8 repository classes
 - `backend/app/services/` — orchestration + business services (booking, availability, media, notifications, worker, agent runtime, twilio gateway)
 - `backend/app/tools/tool_runner.py` — 19 callable tools
-- `backend/app/api/routers/` — core/admin/worker/media/notifications/events + twilio + agent
+- `backend/app/api/routers/` — core/admin/worker/media/notifications/events + twilio + agent + metrics
 - `backend/alembic/versions/001_initial_schema.py` — Full initial migration
-- `backend/tests/` — 24 tests covering availability, state machine, idempotency, health, phase-2 orchestration, and phase-3 lifecycle coverage
+- `backend/alembic/versions/002_phase5_reliability.py` — Phase 5 retry/dead-letter schema upgrade
+- `backend/tests/` — 34 tests covering availability, state machine, idempotency, orchestration, lifecycle, and phase-5 reliability hardening
 
 **Phase 2 Summary (Completed):**
 - ✅ Twilio webhook ingestion routes for SMS and WhatsApp
@@ -90,19 +91,23 @@
 - ✅ Reminder operations hardened with T-20 scheduler path, duplicate protection, and incall/outcall style hints
 - ✅ API docs updated and regression coverage expanded to 29 passing backend tests
 
-**Next Phase (Phase 5):**
-- Implement inbound out-of-order handling and stronger idempotency guarantees
-- Add outbound retry queues + dead-letter handling for failed sends
-- Expand failure telemetry/metrics for reminders, Twilio sends, and tool execution paths
-- Add race-condition and resilience tests across booking lifecycle and channel transitions
-- Produce UAT checklist and launch readiness sign-off artifacts
+**Phase 5 Summary (Completed):**
+- ✅ Inbound idempotency strengthened with DB-safe dedup handling and duplicate response replay support
+- ✅ Out-of-order inbound event handling added to ignore stale events without regressing session flow
+- ✅ Outbound retry queue flow added via notifications with exponential backoff and dead-letter status
+- ✅ Failure telemetry expanded with counters for Twilio sends, tool calls, retries, dead letters, and transitions
+- ✅ Metrics endpoint added (`GET /metrics`) exposing pending reviews, queued due notifications, failed tools, reminder failures
+- ✅ Reminder scheduler now dispatches due notifications and reports delivery outcomes
+- ✅ New migration (`002_phase5_reliability`) adds retry/dead-letter status support and retry metadata fields
+- ✅ Reliability and race-condition test coverage added (`backend/tests/test_phase5_reliability.py`)
+- ✅ UAT + launch checklist artifact added (`docs/PHASE5_UAT_LAUNCH_CHECKLIST.md`)
 
 ## Implementation Order (Do Not Skip)
 
 - Start with Phase 1 from `IMPLEMENTAION_PLAN.md` before channel/LLM/admin work.
 - Implement DB schema + state machine + deterministic tool services first.
 - Add Twilio/LLM orchestration only after deterministic backend behaviors are testable.
-- **Phase 1 through Phase 4 are complete.** Next: Proceed with Phase 5.
+- **Phase 1 through Phase 5 are complete.** Focus next on production UAT execution and operational monitoring.
 
 ## AI Agent Roles for Phase 3+
 

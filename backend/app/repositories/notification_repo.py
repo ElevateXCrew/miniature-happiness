@@ -21,7 +21,9 @@ class NotificationRepository:
     async def list_queued_due(self, now: datetime) -> list[Notification]:
         result = await self.db.execute(
             select(Notification).where(
-                Notification.status == NotificationStatus.QUEUED,
+                Notification.status.in_(
+                    [NotificationStatus.QUEUED, NotificationStatus.RETRY_PENDING]
+                ),
                 Notification.send_at <= now,
             )
         )
