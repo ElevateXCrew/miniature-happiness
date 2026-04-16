@@ -4,9 +4,10 @@
 
 - **Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 Complete:** deterministic backend, Twilio SMS/WhatsApp orchestration, admin lifecycle APIs, worker sync flows, client decision messaging, media enrichment, branch constraints, reminder hardening, and reliability controls are implemented.
 - Conversation flow supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
-- Current backend test status: **34 passing tests**.
+- Current backend test status: **38 passing tests**.
 - Phase 5 reliability hardening is implemented (dedup/out-of-order handling, retry/dead-letter, metrics, resilience tests).
-- **Current active workstream: Phase 6** (Next.js Admin Panel + JWT auth + RBAC + worker section access controls).
+- **Phase 6 Track 0 complete:** backend JWT auth + RBAC schema/APIs and backend authorization guards are implemented.
+- **Current active workstream: Phase 6 Track 1** (Next.js auth shell + role-aware route/menu guards).
 
 ## Source-of-Truth Files (Read First)
 
@@ -105,6 +106,16 @@
 - ✅ New migration (`002_phase5_reliability`) adds retry/dead-letter status support and retry metadata fields
 - ✅ Reliability and race-condition test coverage added (`backend/tests/test_phase5_reliability.py`)
 - ✅ UAT + launch checklist artifact added (`docs/PHASE5_UAT_LAUNCH_CHECKLIST.md`)
+
+**Phase 6 Track 0 Summary (Completed):**
+- ✅ Added auth/RBAC data model with `users` and `worker_section_permissions`.
+- ✅ Added migration `003_phase6_auth_rbac` with `user_role` and `section_key` enums.
+- ✅ Implemented JWT auth endpoints: `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`.
+- ✅ Implemented effective section API: `GET /ui/sections`.
+- ✅ Added admin worker-permission APIs: `GET /admin/users/workers`, `GET /admin/users/{user_id}/section-permissions`, `PUT /admin/users/{user_id}/section-permissions`.
+- ✅ Enforced backend guards for role + section checks (`403` on disabled worker sections).
+- ✅ Added audit + realtime permission update emission on section toggles.
+- ✅ Added Phase 6 regression coverage (`backend/tests/test_phase6_auth_rbac.py`) and kept quality gate green (`ruff`, `mypy`, `pytest`).
 
 ## Implementation Order (Do Not Skip)
 
