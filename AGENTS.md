@@ -6,6 +6,7 @@
 - Conversation flow supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
 - Current backend test status: **34 passing tests**.
 - Phase 5 reliability hardening is implemented (dedup/out-of-order handling, retry/dead-letter, metrics, resilience tests).
+- **Current active workstream: Phase 6** (Next.js Admin Panel + JWT auth + RBAC + worker section access controls).
 
 ## Source-of-Truth Files (Read First)
 
@@ -15,6 +16,7 @@
 - `docs/TOOL_CATALOG.md` (LLM-callable deterministic backend tools)
 - `docs/API_ENDPOINTS.md` (initial API contract for backend/admin/worker/mobile bridge)
 - `docs/WORKFLOWS.md` (critical end-to-end behavior)
+- `docs/ADMIN_PANEL_SPEC.md` (screen-by-screen contract for Next.js admin/worker interfaces)
 - `prompts/sms.txt` and `prompts/whatsapp.txt` (channel-specific agent behavior)
 - `AI Booking Assistant_ Features and Flow.md` (original long-form requirements)
 
@@ -27,6 +29,8 @@
 - Outcall requires address + advance payment + receipt flow.
 - If client starts on SMS and media is needed, route them to WhatsApp on same number.
 - Backend state machine is source of truth; LLM handles language/tool invocation only.
+- Auth must be role-based with only two roles: `admin`, `worker`.
+- Admin can toggle worker section access (for example `live_chat`); disabled sections must be blocked in both UI and backend APIs.
 
 ## Phase 1 Summary (Completed)
 
@@ -107,7 +111,12 @@
 - Start with Phase 1 from `IMPLEMENTAION_PLAN.md` before channel/LLM/admin work.
 - Implement DB schema + state machine + deterministic tool services first.
 - Add Twilio/LLM orchestration only after deterministic backend behaviors are testable.
-- **Phase 1 through Phase 5 are complete.** Focus next on production UAT execution and operational monitoring.
+- **Phase 1 through Phase 5 are complete.** Current sequence for Phase 6 is:
+  1. Backend JWT auth + RBAC schema/API first.
+  2. Backend authorization guards (`403` on disabled sections).
+  3. Next.js auth shell and role-aware route/menu guards.
+  4. Admin/worker screens and realtime sync.
+  5. RBAC regression/UAT and launch checks.
 
 ## AI Agent Roles for Phase 3+
 
@@ -151,6 +160,7 @@ Use these focused agent roles when parallelizing implementation work for upcomin
 ## Agent Handoff Rules
 
 - Every agent must read: `IMPLEMENTAION_PLAN.md`, `docs/STATE_MACHINE.md`, `docs/TOOL_CATALOG.md`, and `docs/WORKFLOWS.md` before coding.
+- For Phase 6 work, also read `docs/ADMIN_PANEL_SPEC.md` and `docs/API_ENDPOINTS.md` before coding.
 - Never bypass deterministic backend guards with prompt-only logic.
 - Keep all secrets and deployment-specific values in `.env` only; no hardcoded credentials.
 - Update tests alongside behavior changes and document new/changed endpoints in `docs/API_ENDPOINTS.md`.
@@ -204,3 +214,14 @@ mypy app
 2. `ruff check .`
 3. `mypy app`
 4. `pytest`
+
+## Phase 6 Immediate Commands (backend)
+
+Run from `backend/`:
+
+1. `ruff check .`
+2. `mypy app`
+3. `pytest`
+
+Phase 6 expectation:
+- Keep backend quality gate green while adding auth/RBAC endpoints consumed by Next.js.

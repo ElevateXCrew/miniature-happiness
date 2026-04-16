@@ -148,6 +148,7 @@ The admin can then:
 - edit it
 - mark it complete
 - cancel it
+- can see live chat bwtween the agent and client 
 
 The assistant should respond accordingly.
 

@@ -1,5 +1,23 @@
 # API Endpoints (Initial Contract)
 
+## Auth and Session (Phase 6)
+
+- `POST /auth/login`
+  - Returns access token + refresh token and basic user profile.
+- `POST /auth/refresh`
+  - Rotates/refreshes access token.
+- `POST /auth/logout`
+  - Invalidates refresh token/session.
+- `GET /auth/me`
+  - Returns current authenticated user and role.
+
+## UI Capability APIs (Phase 6)
+
+- `GET /ui/sections`
+  - Returns effective section visibility for current user.
+  - Admin receives full access map.
+  - Worker receives admin-configured section map.
+
 ## Health
 
 - `GET /health`
@@ -39,6 +57,14 @@ Notes:
 - `POST /admin/agent/pause`
 - `POST /admin/agent/resume`
 
+### Admin User/Permission Management (Phase 6)
+
+- `GET /admin/users/workers`
+- `GET /admin/users/{user_id}/section-permissions`
+- `PUT /admin/users/{user_id}/section-permissions`
+  - Enables/disables worker section access (`live_chat`, `dashboard`, etc.).
+  - Must emit audit event and realtime sync event.
+
 ## Worker APIs (Mobile-ready)
 
 - `GET /worker/bookings/upcoming`
@@ -48,6 +74,10 @@ Notes:
 - `POST /worker/availability/free-now`
 - `POST /worker/availability/block`
 - `POST /worker/messages`
+
+Notes:
+- Worker endpoints require authenticated user role `worker` or admin override.
+- If admin disables a section, related worker endpoints must return `403`.
 
 ## Media APIs
 
@@ -81,3 +111,4 @@ Notes:
 
 Notes:
 - Stream now emits booking lifecycle and worker sync events with incremental `id` for resume via `Last-Event-ID`.
+- Stream should also emit worker permission updates so worker/admin UI can refresh access instantly.
