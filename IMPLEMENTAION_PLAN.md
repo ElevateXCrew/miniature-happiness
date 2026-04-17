@@ -8,6 +8,8 @@ This file is the single execution source of truth for project planning.
 - Deterministic FastAPI orchestration, Twilio SMS/WhatsApp flows, booking lifecycle, media rules, reminders, reliability hardening, and metrics are implemented.
 - Backend quality gate is green: `ruff check .`, `mypy app`, and `pytest` pass.
 - Phase 6 Track 4 implementation is complete: admin/worker realtime SSE sync, permission refresh propagation, and Track 4 regression/UAT coverage are added.
+- Phase 6 launch hardening release-candidate gate has been executed and is green (backend lint/types/tests, focused realtime regression, frontend build).
+- Twilio webhook regression tests are aligned with current deterministic contract (empty TwiML response + orchestrator-managed outbound sends).
 
 ## Scope Locks (Agreed)
 
@@ -134,6 +136,6 @@ Status: Complete.
 
 ## Immediate Next Actions
 
-1. Run full backend + frontend quality gate before release candidate cut.
-2. Execute Phase 6 realtime/RBAC UAT matrix in staging.
-3. Capture product + engineering launch sign-off for panel release.
+1. Execute Phase 6 realtime/RBAC UAT matrix in staging.
+2. Capture product + engineering launch sign-off for panel release.
+3. Complete launch checklist evidence for stream behavior, permission propagation, and approvals.

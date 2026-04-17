@@ -7,6 +7,7 @@ Use it for launch readiness, regression safety, and handoff continuity.
 
 - Phase 6 Tracks 0-4 are implemented and integrated.
 - Admin/worker realtime sync and RBAC propagation are implemented.
+- Release-candidate quality gate is complete and green across backend/frontend checks.
 - Remaining work is focused on UAT execution, release sign-off, and operational hardening.
 
 ## Completed Delivery Baseline (Do Not Re-open Without Product Direction)
