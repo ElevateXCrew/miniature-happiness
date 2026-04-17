@@ -1,0 +1,67 @@
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.card:hover {
+  border-color: var(--border-default);
+}
+
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: var(--space-2);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+}
+
+.value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  align-self: flex-end;
+}
+
+.label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Accents */
+.warning {
+  border-color: rgba(245, 158, 11, 0.25);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.08) inset;
+}
+.warning .value { color: var(--color-warning); }
+
+.danger {
+  border-color: rgba(239, 68, 68, 0.25);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.08) inset;
+}
+.danger .value { color: var(--color-danger); }
+
+.success {
+  border-color: rgba(16, 185, 129, 0.25);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.08) inset;
+}
+.success .value { color: var(--color-success); }

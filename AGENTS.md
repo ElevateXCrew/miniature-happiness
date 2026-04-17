@@ -8,7 +8,8 @@
 - Phase 5 reliability hardening is implemented (dedup/out-of-order handling, retry/dead-letter, metrics, resilience tests).
 - **Phase 6 Track 0 complete:** backend JWT auth + RBAC schema/APIs and backend authorization guards are implemented.
 - **Phase 6 Track 1 complete:** Next.js 14 frontend shell, auth flow, role-aware sidebar, and route guards are implemented at `frontend/`.
-- **Current active workstream: Phase 6 Track 2** (Admin core screens — dashboard, booking queue, detail/timeline, media, sessions, settings).
+- **Phase 6 Track 2 complete:** Admin core screens implemented — dashboard (KPIs + recent activity), booking queue (filterable + paginated + inline actions), booking detail + timeline, media gallery + receipt marking, active sessions + pause/resume, notification center, and worker section access settings.
+- **Current active workstream: Phase 6 Track 3** (Worker portal — upcoming bookings, worker actions, permission-gated views).
 
 ## Source-of-Truth Files (Read First)
 
@@ -142,6 +143,25 @@
 - `frontend/src/types/index.ts` — shared TypeScript types
 - `backend/app/scripts/seed_users.py` — dev admin seed script
 
+**Phase 6 Track 2 Summary (Completed):**
+- ✅ Dashboard page: live KPI cards (pending reviews, queued notifications, reminder failures, failed tools) + recent bookings table + recent notifications list.
+- ✅ Booking queue page: status filter dropdown, paginated table (20/page), inline approve/reject/cancel actions per row, click-through to detail.
+- ✅ Booking detail + timeline page: sticky detail panel with all booking fields, approve/reject/cancel header actions, mark incall address sent, tabbed timeline (messages/audit/notifications/media) and media gallery with mark-receipt.
+- ✅ Active sessions page: session list with state badges, channel, active booking link; agent-wide pause/resume controls.
+- ✅ Notification center page: full queue table with status badges, manual run-dispatch and run-reminders triggers.
+- ✅ Settings page: worker list with per-section toggle grid; toggles save immediately to backend and reflect real-time.
+- ✅ `src/lib/adminApi.ts` — typed wrapper for all Track 2 backend API calls.
+- ✅ Build verified: `npm run build` passes with 0 TypeScript errors, 13 routes (including dynamic `/bookings/[id]`).
+
+**Relevant Track 2 Frontend Directories:**
+- `frontend/src/app/(protected)/dashboard/` — KPI dashboard
+- `frontend/src/app/(protected)/bookings/` — booking queue + `[id]/` detail page
+- `frontend/src/app/(protected)/sessions/` — live chat monitor
+- `frontend/src/app/(protected)/notifications/` — notification center
+- `frontend/src/app/(protected)/settings/` — worker access management
+- `frontend/src/components/dashboard/` — KpiCard component
+- `frontend/src/lib/adminApi.ts` — typed API helpers
+
 ## Implementation Order (Do Not Skip)
 
 - Start with Phase 1 from `IMPLEMENTAION_PLAN.md` before channel/LLM/admin work.
@@ -151,8 +171,9 @@
   1. ✅ Backend JWT auth + RBAC schema/API.
   2. ✅ Backend authorization guards (`403` on disabled sections).
   3. ✅ Next.js auth shell and role-aware route/menu guards (Track 1).
-  4. 🔄 Admin/worker screens and realtime sync (Track 2 + 3 — active).
-  5. ⬜ RBAC regression/UAT and launch checks (Track 4).
+  4. ✅ Admin core screens — dashboard, bookings, sessions, notifications, settings (Track 2).
+  5. 🔄 Worker portal — upcoming bookings, worker actions, permission-gated views (Track 3 — active).
+  6. ⬜ Realtime SSE sync + RBAC regression/UAT and launch checks (Track 4).
 
 ## AI Agent Roles for Phase 3+
 

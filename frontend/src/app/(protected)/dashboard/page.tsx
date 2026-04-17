@@ -1,15 +1,173 @@
-import type { Metadata } from 'next';
-import { SectionPlaceholder } from '@/components/ui/SectionPlaceholder';
+'use client';
 
-export const metadata: Metadata = { title: 'Dashboard' };
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { metricsApi, bookingsApi, notificationsApi } from '@/lib/adminApi';
+import { KpiCard } from '@/components/dashboard/KpiCard';
+import { Badge, bookingStatusColor } from '@/components/ui/Badge';
+import { Spinner } from '@/components/ui/Spinner';
+import type { Metrics, BookingSummary, NotificationItem } from '@/types';
+import styles from './page.module.css';
 
 export default function DashboardPage() {
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [bookings, setBookings] = useState<BookingSummary[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [m, b, n] = await Promise.all([
+          metricsApi.get(),
+          bookingsApi.list({ limit: 5 }),
+          notificationsApi.list(),
+        ]);
+        if (cancelled) return;
+        setMetrics(m);
+        setBookings(b);
+        setNotifications(n.slice(0, 5));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className={styles.loadingCenter}>
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
   return (
-    <SectionPlaceholder
-      icon="⬛"
-      title="Dashboard"
-      description="KPI cards, pending reviews, and reliability highlights will live here."
-      comingIn="Track 2"
-    />
+    <div className={styles.page}>
+      <header className={styles.pageHeader}>
+        <h1 className={styles.pageTitle}>Dashboard</h1>
+        <p className={styles.pageSub}>Live operational overview</p>
+      </header>
+
+      {/* KPI Row */}
+      <section className={styles.kpiGrid} aria-label="Key metrics">
+        <KpiCard
+          icon="📋"
+          label="Pending Reviews"
+          value={metrics?.pending_reviews ?? '—'}
+          accent={metrics && metrics.pending_reviews > 0 ? 'warning' : 'default'}
+          description="Bookings awaiting admin decision"
+        />
+        <KpiCard
+          icon="🔔"
+          label="Queued Notifications"
+          value={metrics?.queued_due_notifications ?? '—'}
+          accent="default"
+          description="Due notifications in dispatch queue"
+        />
+        <KpiCard
+          icon="⚠️"
+          label="Reminder Failures"
+          value={metrics?.reminder_failures ?? '—'}
+          accent={metrics && metrics.reminder_failures > 0 ? 'danger' : 'default'}
+          description="Failed reminder send attempts"
+        />
+        <KpiCard
+          icon="🔧"
+          label="Failed Tool Calls"
+          value={metrics?.failed_tool_calls ?? '—'}
+          accent={metrics && metrics.failed_tool_calls > 0 ? 'danger' : 'default'}
+          description="Agent tool errors in last cycle"
+        />
+      </section>
+
+      {/* Recent activity */}
+      <div className={styles.recentGrid}>
+        {/* Recent bookings */}
+        <section className={styles.recentSection}>
+          <div className={styles.sectionHead}>
+            <h2 className={styles.sectionTitle}>Recent Bookings</h2>
+            <Link href="/bookings" className={styles.viewAll}>View all →</Link>
+          </div>
+          <div className={styles.tableWrapper}>
+            {bookings.length === 0 ? (
+              <p className={styles.empty}>No bookings yet.</p>
+            ) : (
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Phone</th>
+                    <th>Type</th>
+                    <th>Start</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookings.map((b) => (
+                    <tr key={b.id}>
+                      <td>
+                        <Link href={`/bookings/${b.id}`} className={styles.link}>
+                          {b.client_phone_e164 ?? b.client_id.slice(0, 8)}
+                        </Link>
+                      </td>
+                      <td>{b.booking_type ?? '—'}</td>
+                      <td>
+                        {b.scheduled_start_at
+                          ? new Date(b.scheduled_start_at).toLocaleString('en-GB', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })
+                          : '—'}
+                      </td>
+                      <td>
+                        <Badge color={bookingStatusColor(b.status)}>
+                          {b.status.replace('_', ' ')}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+
+        {/* Recent notifications */}
+        <section className={styles.recentSection}>
+          <div className={styles.sectionHead}>
+            <h2 className={styles.sectionTitle}>Recent Notifications</h2>
+            <Link href="/notifications" className={styles.viewAll}>View all →</Link>
+          </div>
+          <div className={styles.tableWrapper}>
+            {notifications.length === 0 ? (
+              <p className={styles.empty}>No notifications in queue.</p>
+            ) : (
+              <ul className={styles.notifList}>
+                {notifications.map((n) => (
+                  <li key={n.id} className={styles.notifItem}>
+                    <span className={styles.notifKey}>{n.template_key}</span>
+                    <Badge
+                      color={
+                        n.status === 'dead_letter'
+                          ? 'danger'
+                          : n.status === 'retry_pending'
+                          ? 'warning'
+                          : n.status === 'sent'
+                          ? 'success'
+                          : 'default'
+                      }
+                    >
+                      {n.status}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }
