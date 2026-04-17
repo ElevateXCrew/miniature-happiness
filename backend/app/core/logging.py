@@ -21,7 +21,7 @@ def configure_logging() -> None:
         ],
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        logger_factory=structlog.stdlib.LoggerFactory(),
     )
 
     # Also configure stdlib so uvicorn/sqlalchemy logs flow through

@@ -13,11 +13,16 @@ class AuditEvent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     entity_type: Mapped[str] = mapped_column(Text, nullable=False)
     entity_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), nullable=False
+        Uuid(as_uuid=True, native_uuid=True), nullable=False
     )
     event_type: Mapped[str] = mapped_column(Text, nullable=False)
     actor_type: Mapped[ActorType] = mapped_column(
-        Enum(ActorType, name="actor_type"), nullable=False
+        Enum(
+            ActorType,
+            name="actor_type",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
     )
     actor_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column(

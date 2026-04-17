@@ -30,6 +30,7 @@ def upgrade() -> None:
         "HANDOFF",
         "ERROR_REVIEW",
         name="conversation_state",
+        create_type=False,
     )
     conversation_state.create(op.get_bind(), checkfirst=True)
 
@@ -41,50 +42,67 @@ def upgrade() -> None:
         "CANCELLED",
         "COMPLETED",
         name="booking_status",
+        create_type=False,
     )
     booking_status.create(op.get_bind(), checkfirst=True)
 
-    booking_type = postgresql.ENUM("incall", "outcall", name="booking_type")
+    booking_type = postgresql.ENUM("incall", "outcall", name="booking_type", create_type=False)
     booking_type.create(op.get_bind(), checkfirst=True)
 
-    channel_enum = postgresql.ENUM("sms", "whatsapp", "worker_app", "admin_panel", name="channel")
+    channel_enum = postgresql.ENUM(
+        "sms", "whatsapp", "worker_app", "admin_panel", name="channel", create_type=False
+    )
     channel_enum.create(op.get_bind(), checkfirst=True)
 
-    message_direction = postgresql.ENUM("inbound", "outbound", name="message_direction")
+    message_direction = postgresql.ENUM(
+        "inbound", "outbound", name="message_direction", create_type=False
+    )
     message_direction.create(op.get_bind(), checkfirst=True)
 
     sender_type = postgresql.ENUM(
-        "client", "agent", "worker", "admin", "system", name="sender_type"
+        "client", "agent", "worker", "admin", "system", name="sender_type", create_type=False
     )
     sender_type.create(op.get_bind(), checkfirst=True)
 
     notification_target_type = postgresql.ENUM(
-        "admin", "worker", "client", name="notification_target_type"
+        "admin", "worker", "client", name="notification_target_type", create_type=False
     )
     notification_target_type.create(op.get_bind(), checkfirst=True)
 
     notification_channel = postgresql.ENUM(
-        "in_app", "sms", "whatsapp", "push", "system", name="notification_channel"
+        "in_app",
+        "sms",
+        "whatsapp",
+        "push",
+        "system",
+        name="notification_channel",
+        create_type=False,
     )
     notification_channel.create(op.get_bind(), checkfirst=True)
 
-    notification_status = postgresql.ENUM("queued", "sent", "failed", name="notification_status")
+    notification_status = postgresql.ENUM(
+        "queued", "sent", "failed", name="notification_status", create_type=False
+    )
     notification_status.create(op.get_bind(), checkfirst=True)
 
-    actor_type = postgresql.ENUM("agent", "admin", "worker", "system", name="actor_type")
+    actor_type = postgresql.ENUM(
+        "agent", "admin", "worker", "system", name="actor_type", create_type=False
+    )
     actor_type.create(op.get_bind(), checkfirst=True)
 
-    awaiting_review_from = postgresql.ENUM("admin", "worker", "none", name="awaiting_review_from")
+    awaiting_review_from = postgresql.ENUM(
+        "admin", "worker", "none", name="awaiting_review_from", create_type=False
+    )
     awaiting_review_from.create(op.get_bind(), checkfirst=True)
 
-    inbound_provider = postgresql.ENUM("twilio", name="inbound_provider")
+    inbound_provider = postgresql.ENUM("twilio", name="inbound_provider", create_type=False)
     inbound_provider.create(op.get_bind(), checkfirst=True)
 
-    media_channel = postgresql.ENUM("sms", "whatsapp", name="media_channel")
+    media_channel = postgresql.ENUM("sms", "whatsapp", name="media_channel", create_type=False)
     media_channel.create(op.get_bind(), checkfirst=True)
 
     message_channel = postgresql.ENUM(
-        "sms", "whatsapp", "worker_app", "admin_panel", name="message_channel"
+        "sms", "whatsapp", "worker_app", "admin_panel", name="message_channel", create_type=False
     )
     message_channel.create(op.get_bind(), checkfirst=True)
 
@@ -143,21 +161,13 @@ def upgrade() -> None:
         sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "status",
-            sa.Enum(
-                "DRAFT",
-                "PENDING_REVIEW",
-                "CONFIRMED",
-                "REJECTED",
-                "CANCELLED",
-                "COMPLETED",
-                name="booking_status",
-            ),
+            booking_status,
             nullable=False,
             server_default="DRAFT",
         ),
         sa.Column(
             "booking_type",
-            sa.Enum("incall", "outcall", name="booking_type"),
+            booking_type,
             nullable=True,
         ),
         sa.Column("scheduled_start_at", sa.DateTime(timezone=True), nullable=True),
@@ -173,7 +183,7 @@ def upgrade() -> None:
         sa.Column("advance_received", sa.Boolean, nullable=False, server_default="false"),
         sa.Column(
             "awaiting_review_from",
-            sa.Enum("admin", "worker", "none", name="awaiting_review_from"),
+            awaiting_review_from,
             nullable=False,
             server_default="none",
         ),
@@ -208,23 +218,14 @@ def upgrade() -> None:
         sa.Column("worker_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "state",
-            sa.Enum(
-                "IDLE",
-                "COLLECTING",
-                "AWAITING_CLIENT_CONFIRMATION",
-                "WAITING_REVIEW",
-                "PAUSED",
-                "HANDOFF",
-                "ERROR_REVIEW",
-                name="conversation_state",
-            ),
+            conversation_state,
             nullable=False,
             server_default="IDLE",
         ),
         sa.Column("active_booking_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
             "last_channel",
-            sa.Enum("sms", "whatsapp", "worker_app", "admin_panel", name="channel"),
+            channel_enum,
             nullable=True,
         ),
         sa.Column("last_inbound_at", sa.DateTime(timezone=True), nullable=True),
@@ -263,17 +264,17 @@ def upgrade() -> None:
         sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "direction",
-            sa.Enum("inbound", "outbound", name="message_direction"),
+            message_direction,
             nullable=False,
         ),
         sa.Column(
             "channel",
-            sa.Enum("sms", "whatsapp", "worker_app", "admin_panel", name="message_channel"),
+            message_channel,
             nullable=False,
         ),
         sa.Column(
             "sender_type",
-            sa.Enum("client", "agent", "worker", "admin", "system", name="sender_type"),
+            sender_type,
             nullable=False,
         ),
         sa.Column("body", sa.Text, nullable=True),
@@ -305,7 +306,7 @@ def upgrade() -> None:
         sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "channel",
-            sa.Enum("sms", "whatsapp", name="media_channel"),
+            media_channel,
             nullable=False,
         ),
         sa.Column("media_type", sa.Text, nullable=True),
@@ -338,20 +339,20 @@ def upgrade() -> None:
         sa.Column("booking_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
             "target_type",
-            sa.Enum("admin", "worker", "client", name="notification_target_type"),
+            notification_target_type,
             nullable=False,
         ),
         sa.Column("target_ref", sa.Text, nullable=False),
         sa.Column(
             "channel",
-            sa.Enum("in_app", "sms", "whatsapp", "push", "system", name="notification_channel"),
+            notification_channel,
             nullable=False,
         ),
         sa.Column("template_key", sa.Text, nullable=False),
         sa.Column("payload", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column(
             "status",
-            sa.Enum("queued", "sent", "failed", name="notification_status"),
+            notification_status,
             nullable=False,
             server_default="queued",
         ),
@@ -382,7 +383,7 @@ def upgrade() -> None:
         sa.Column("event_type", sa.Text, nullable=False),
         sa.Column(
             "actor_type",
-            sa.Enum("agent", "admin", "worker", "system", name="actor_type"),
+            actor_type,
             nullable=False,
         ),
         sa.Column("actor_ref", sa.Text, nullable=True),
@@ -408,7 +409,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "provider",
-            sa.Enum("twilio", name="inbound_provider"),
+            inbound_provider,
             nullable=False,
         ),
         sa.Column("external_id", sa.Text, nullable=False),

@@ -1,3 +1,4 @@
+README.md
 pyproject.toml
 alysha_booking_backend.egg-info/PKG-INFO
 alysha_booking_backend.egg-info/SOURCES.txt
@@ -52,6 +53,8 @@ app/repositories/session_repo.py
 app/repositories/user_repo.py
 app/repositories/worker_permission_repo.py
 app/repositories/worker_repo.py
+app/scripts/__init__.py
+app/scripts/seed_users.py
 app/services/__init__.py
 app/services/agent_runtime.py
 app/services/auth_service.py

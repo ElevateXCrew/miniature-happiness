@@ -15,16 +15,33 @@ class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "messages"
 
     session_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False),
+        Uuid(as_uuid=True, native_uuid=True),
         ForeignKey("conversation_sessions.id"),
         nullable=False,
     )
     direction: Mapped[MessageDirection] = mapped_column(
-        Enum(MessageDirection, name="message_direction"), nullable=False
+        Enum(
+            MessageDirection,
+            name="message_direction",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
     )
-    channel: Mapped[Channel] = mapped_column(Enum(Channel, name="message_channel"), nullable=False)
+    channel: Mapped[Channel] = mapped_column(
+        Enum(
+            Channel,
+            name="message_channel",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+    )
     sender_type: Mapped[SenderType] = mapped_column(
-        Enum(SenderType, name="sender_type"), nullable=False
+        Enum(
+            SenderType,
+            name="sender_type",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
     )
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     twilio_message_sid: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)

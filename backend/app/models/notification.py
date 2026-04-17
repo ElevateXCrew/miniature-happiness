@@ -16,19 +16,33 @@ class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "notifications"
 
     booking_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), ForeignKey("bookings.id"), nullable=True
+        Uuid(as_uuid=True, native_uuid=True), ForeignKey("bookings.id"), nullable=True
     )
     target_type: Mapped[NotificationTargetType] = mapped_column(
-        Enum(NotificationTargetType, name="notification_target_type"), nullable=False
+        Enum(
+            NotificationTargetType,
+            name="notification_target_type",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
     )
     target_ref: Mapped[str] = mapped_column(Text, nullable=False)
     channel: Mapped[NotificationChannel] = mapped_column(
-        Enum(NotificationChannel, name="notification_channel"), nullable=False
+        Enum(
+            NotificationChannel,
+            name="notification_channel",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
     )
     template_key: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[NotificationStatus] = mapped_column(
-        Enum(NotificationStatus, name="notification_status"),
+        Enum(
+            NotificationStatus,
+            name="notification_status",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
         default=NotificationStatus.QUEUED,
     )

@@ -14,17 +14,21 @@ class WorkerSectionPermission(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     worker_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False),
+        Uuid(as_uuid=True, native_uuid=True),
         ForeignKey("users.id"),
         nullable=False,
     )
     section_key: Mapped[SectionKey] = mapped_column(
-        Enum(SectionKey, name="section_key"),
+        Enum(
+            SectionKey,
+            name="section_key",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
     )
     can_view: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False),
+        Uuid(as_uuid=True, native_uuid=True),
         ForeignKey("users.id"),
         nullable=True,
     )
