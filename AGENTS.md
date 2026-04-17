@@ -11,7 +11,10 @@
 - **Phase 6 Track 2 complete:** Admin core screens implemented — dashboard (KPIs + recent activity), booking queue (filterable + paginated + inline actions), booking detail + timeline, media gallery + receipt marking, active sessions + pause/resume, notification center, and worker section access settings.
 - **Phase 6 Track 3 complete:** Worker portal implemented — upcoming bookings with approve/reject/complete-early, Free Now availability command, Send Message to active chat, permission-gated views per admin section toggles.
 - **Phase 6 Track 4 complete:** Realtime SSE sync integrated for admin and worker sessions, permission refresh propagation implemented, and Track 4 RBAC realtime regression + UAT checklist updates landed.
-- **Current active workstream:** Phase 6 launch hardening and staged UAT sign-off.
+- **Phase 6 launch hardening update (2026-04-17):** release-candidate quality gate executed and green (`ruff`, `mypy`, full backend `pytest`, focused Track 4 realtime regression, frontend `npm run build`).
+- Twilio webhook contract verified in tests: webhook returns empty TwiML response while outbound delivery is handled by orchestrator-side send flow.
+- Frontend build warning hardening applied by setting `turbopack.root` in `frontend/next.config.ts`.
+- **Current active workstream:** staged UAT execution and launch sign-off capture.
 
 ## Source-of-Truth Files (Read First)
 
@@ -186,6 +189,7 @@
 - ✅ Notification lifecycle events (`notification.created`, `notification.status_changed`) now publish to realtime stream for queue/KPI freshness.
 - ✅ Track 4 regression tests added (`backend/tests/test_phase6_track4_realtime.py`) covering stream RBAC guards and worker event-target filtering logic.
 - ✅ Track 4 UAT + launch checklist addendum added to `docs/PHASE5_UAT_LAUNCH_CHECKLIST.md`.
+- ✅ Release-candidate gate re-run completed during launch hardening: backend and frontend quality checks are green.
 
 ## Implementation Order (Do Not Skip)
 
@@ -333,9 +337,18 @@ cd backend && python -m app.scripts.seed_users
 3. `pytest`
 4. `python -m pytest tests/test_phase6_track4_realtime.py -q` (focused Track 4 realtime regression)
 
+Current verification snapshot:
+- `ruff check .` ✅
+- `mypy app` ✅
+- `pytest` ✅ (40 passed)
+- `python -m pytest tests/test_phase6_track4_realtime.py -q` ✅
+
 ### Frontend (run from `frontend/`)
 1. `npm run build` — verify TypeScript + compilation
 2. `npm run dev` — start dev server
+
+Current verification snapshot:
+- `npm run build` ✅ (13 routes generated)
 
 Phase 6 expectations:
 - Backend quality gate (lint + types + tests) stays green throughout.

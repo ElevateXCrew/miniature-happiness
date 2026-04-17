@@ -51,7 +51,7 @@ This checklist covers final reliability hardening verification for:
 ## Launch Readiness Sign-off
 
 - [ ] Migrations applied in staging and production (`alembic upgrade head`).
-- [ ] Full backend tests passing (`python -m pytest`).
+- [x] Full backend tests passing (`python -m pytest`).
 - [ ] Reliability counters visible on `GET /metrics`.
 - [ ] Dead-letter queue monitoring reviewed by ops.
 - [ ] Twilio delivery failure alert thresholds confirmed.
