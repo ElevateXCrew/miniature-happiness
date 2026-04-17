@@ -5,7 +5,7 @@
 
 import type { TokenPair } from '@/types';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+export const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 // ----------------------------------------------------------
 // Token storage helpers (localStorage — client-side only)
@@ -58,6 +58,15 @@ async function refreshAccessToken(): Promise<string | null> {
     clearTokens();
     return null;
   }
+}
+
+export async function tryRefreshSession(): Promise<boolean> {
+  const accessToken = await refreshAccessToken();
+  if (accessToken) return true;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('auth:expired'));
+  }
+  return false;
 }
 
 // ----------------------------------------------------------

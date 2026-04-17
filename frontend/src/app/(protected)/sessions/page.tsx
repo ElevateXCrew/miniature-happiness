@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { sessionsApi } from '@/lib/adminApi';
+import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { ActiveSession } from '@/types';
+import type { StreamEnvelope } from '@/lib/realtime';
 import styles from './page.module.css';
 
 const SESSION_STATE_COLOR: Record<string, 'success' | 'warning' | 'info' | 'default'> = {
@@ -34,6 +36,16 @@ export default function SessionsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useAdminRealtimeRefresh(
+    (event: StreamEnvelope) =>
+      event.type === 'booking.status_changed'
+      || event.type === 'booking.submitted_for_review'
+      || event.type.startsWith('worker.'),
+    () => {
+      void load();
+    },
+  );
 
   const pause = async () => {
     setActionLoading('pause');

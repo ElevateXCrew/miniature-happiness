@@ -21,6 +21,7 @@ import {
   getRefreshToken,
   storeTokens,
 } from '@/lib/api';
+import { openAuthenticatedSseStream, type StreamEnvelope } from '@/lib/realtime';
 import type { SectionKey, SectionMap, User } from '@/types';
 
 // ----------------------------------------------------------
@@ -40,6 +41,8 @@ interface AuthContextValue extends AuthState {
   isAdmin: boolean;
   hasSection: (key: SectionKey) => boolean;
 }
+
+export const ADMIN_REALTIME_EVENT = 'admin:realtime';
 
 // ----------------------------------------------------------
 // Default section map — all visible (admin) / empty
@@ -98,6 +101,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const refreshSections = useCallback(async () => {
+    const sectionsRes = await api.get<{ sections: SectionMap }>('/ui/sections');
+    setState((prev) =>
+      prev.isAuthenticated
+        ? {
+            ...prev,
+            sections: sectionsRes.sections,
+          }
+        : prev,
+    );
+  }, []);
+
   const setUnauthenticated = useCallback(() => {
     setState({
       user: null,
@@ -150,6 +165,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener('auth:expired', handler);
     return () => window.removeEventListener('auth:expired', handler);
   }, [setUnauthenticated]);
+
+  // ---- realtime stream (admin sync + worker permission updates) ----
+
+  useEffect(() => {
+    if (!state.isAuthenticated || !state.user) {
+      return;
+    }
+
+    const path = state.user.role === 'admin' ? '/events/admin/stream' : '/events/worker/stream';
+
+    const stop = openAuthenticatedSseStream({
+      path,
+      onEvent: (event: StreamEnvelope) => {
+        if (state.user?.role === 'worker' && event.type === 'worker.permissions.updated') {
+          void refreshSections();
+        }
+
+        if (typeof window !== 'undefined' && state.user?.role === 'admin') {
+          window.dispatchEvent(new CustomEvent(ADMIN_REALTIME_EVENT, { detail: event }));
+        }
+      },
+    });
+
+    return () => {
+      stop();
+    };
+  }, [refreshSections, state.isAuthenticated, state.user]);
 
   // ---- public actions ----
 

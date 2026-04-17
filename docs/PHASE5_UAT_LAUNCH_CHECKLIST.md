@@ -61,3 +61,46 @@ This checklist covers final reliability hardening verification for:
 ## Go-Live Recommendation
 
 Proceed to launch only when all UAT matrix scenarios are green and no unresolved dead-letter growth trend is present for 24h in staging-like traffic.
+
+## Phase 6 Track 4 Addendum (Admin Panel + RBAC Realtime)
+
+### Additional Preconditions
+
+- Frontend build passes in `frontend/`:
+  - `npm run build`
+- Backend includes realtime stream endpoints:
+  - `GET /events/admin/stream`
+  - `GET /events/worker/stream`
+
+### Realtime + RBAC UAT Matrix (Must Pass)
+
+1. Admin realtime booking sync
+   - Keep `Dashboard`, `Bookings`, and `Live Chat` open in admin UI.
+   - Trigger booking approve/reject/complete from a second session.
+   - Expected: pages refresh automatically without manual reload.
+
+2. Notification lifecycle realtime sync
+   - Trigger `/notifications/dispatch/run` with queued notifications.
+   - Expected: notification center status chips update from `queued` to `sent`/`retry_pending`/`dead_letter` without manual refresh.
+
+3. Worker permission propagation
+   - Keep worker logged in with `live_chat` enabled.
+   - From admin settings, disable `live_chat` for that worker.
+   - Expected: worker sections refresh immediately; disabled actions/views are blocked without re-login.
+
+4. Stream RBAC guards
+   - Attempt `GET /events/admin/stream` with worker token.
+   - Attempt `GET /events/worker/stream` with admin token.
+   - Expected: both return `403`.
+
+5. Worker-targeted permission stream filtering
+   - Connect worker A to `/events/worker/stream`.
+   - Update permissions for worker B, then worker A.
+   - Expected: worker A receives only worker A permission event.
+
+### Phase 6 Launch Sign-off
+
+- [ ] Backend tests include Track 4 realtime/RBAC regression coverage and pass.
+- [ ] Worker/admin realtime stream behavior validated in staging.
+- [ ] Permission toggles propagate instantly to active worker sessions.
+- [ ] Product + Engineering approval captured for admin panel launch.

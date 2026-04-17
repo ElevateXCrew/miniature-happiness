@@ -7,7 +7,7 @@ This file is the single execution source of truth for project planning.
 - Phase 1 through Phase 5 are complete on backend scope.
 - Deterministic FastAPI orchestration, Twilio SMS/WhatsApp flows, booking lifecycle, media rules, reminders, reliability hardening, and metrics are implemented.
 - Backend quality gate is green: `ruff check .`, `mypy app`, and `pytest` pass.
-- Active implementation focus is now Phase 6 (Next.js Admin Panel + RBAC + worker portal access controls).
+- Phase 6 Track 4 implementation is complete: admin/worker realtime SSE sync, permission refresh propagation, and Track 4 regression/UAT coverage are added.
 
 ## Scope Locks (Agreed)
 
@@ -121,6 +121,8 @@ Exit criteria:
 - Permission changes propagate immediately.
 - RBAC and panel workflows pass regression/UAT.
 
+Status: Complete.
+
 ## Phase 6 Execution Order (Do Not Skip)
 
 1. Implement backend auth + RBAC data model and APIs.
@@ -132,8 +134,6 @@ Exit criteria:
 
 ## Immediate Next Actions
 
-1. Finalize docs sync for Phase 6 (`DB_SCHEMA`, `API_ENDPOINTS`, `WORKFLOWS`, `ARCHITECTURE`, `AGENTS`).
-2. Add backend migrations for auth + section permissions.
-3. Implement FastAPI auth and permission middleware/dependencies.
-4. Scaffold Next.js admin app and wire auth session handling.
-5. Implement section visibility controls in admin UI and enforcement tests.
+1. Run full backend + frontend quality gate before release candidate cut.
+2. Execute Phase 6 realtime/RBAC UAT matrix in staging.
+3. Capture product + engineering launch sign-off for panel release.
