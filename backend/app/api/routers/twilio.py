@@ -9,6 +9,7 @@ from app.services.conversation_orchestrator import ConversationOrchestrator
 from app.services.twilio_gateway import TwilioGateway
 
 router = APIRouter(prefix="/webhooks/twilio", tags=["twilio"])
+root_router = APIRouter(tags=["twilio"])
 
 
 def _parse_media(form_data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -39,10 +40,12 @@ async def _handle_twilio_channel(
     request: Request,
     db: AsyncSession,
     channel: Channel,
+    form_data: dict[str, str] | None = None,
 ) -> Response:
     gateway = TwilioGateway()
-    form = await request.form()
-    form_data = {key: str(value) for key, value in form.multi_items()}
+    if form_data is None:
+        form = await request.form()
+        form_data = {key: str(value) for key, value in form.multi_items()}
 
     valid_signature = await gateway.validate_signature(request, form_data)
     if not valid_signature:
@@ -65,7 +68,9 @@ async def _handle_twilio_channel(
         media_items=_parse_media(form_data),
     )
 
-    twiml = gateway.to_twiml(result.response_text)
+    # Outbound replies are sent explicitly through Twilio REST in the orchestrator.
+    # Returning an empty TwiML response avoids duplicate client messages.
+    twiml = gateway.to_twiml()
     return Response(content=twiml, media_type="application/xml")
 
 
@@ -77,3 +82,18 @@ async def inbound_sms(request: Request, db: AsyncSession = Depends(get_db)) -> R
 @router.post("/whatsapp")
 async def inbound_whatsapp(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     return await _handle_twilio_channel(request=request, db=db, channel=Channel.WHATSAPP)
+
+
+@root_router.post("/")
+async def inbound_root_fallback(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
+    """Fallback webhook for Twilio setups accidentally pointed at '/'."""
+    form = await request.form()
+    form_data = {key: str(value) for key, value in form.multi_items()}
+    from_phone = form_data.get("From", "").strip().lower()
+    channel = Channel.WHATSAPP if from_phone.startswith("whatsapp:") else Channel.SMS
+    return await _handle_twilio_channel(
+        request=request,
+        db=db,
+        channel=channel,
+        form_data=form_data,
+    )
