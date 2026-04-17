@@ -53,7 +53,7 @@
 - ✅ NotificationService: Reminder scheduling (T-20 minutes with type-specific templates)
 - ✅ WorkerService: Worker command parsing and availability overrides
 - ✅ ToolRunner: All 19 tools as callable async functions returning structured results
-- ✅ 6 API routers: health, admin (booking approve/reject/cancel/edit, pause/resume), worker, media, notifications, events (SSE stub)
+- ✅ 6 API routers: health, admin (booking approve/reject/cancel/edit, pause/resume), worker, media, notifications, events (admin/worker SSE streams with resume + keepalive)
 - ✅ Initial Alembic migration with all tables, indexes, constraints
 - ✅ Test suite: 5 availability tests, 6 booking state machine tests, 3 idempotency tests, 2 health tests
 
@@ -73,7 +73,7 @@
 - `backend/app/api/routers/` — core/admin/worker/media/notifications/events + twilio + agent + metrics
 - `backend/alembic/versions/001_initial_schema.py` — Full initial migration
 - `backend/alembic/versions/002_phase5_reliability.py` — Phase 5 retry/dead-letter schema upgrade
-- `backend/tests/` — 34 tests covering availability, state machine, idempotency, orchestration, lifecycle, and phase-5 reliability hardening
+- `backend/tests/` — 40 tests covering availability, state machine, idempotency, orchestration, lifecycle, phase-5 reliability hardening, and phase-6 auth/realtime regression paths
 
 **Phase 2 Summary (Completed):**
 - ✅ Twilio webhook ingestion routes for SMS and WhatsApp
