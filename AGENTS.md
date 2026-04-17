@@ -14,7 +14,8 @@
 3. `docs/API_ENDPOINTS.md`
 4. `docs/WORKFLOWS.md`
 5. `docs/ADMIN_PANEL_SPEC.md`
-6. `AI Booking Assistant_ Features and Flow.md`
+6. `docs/MOBILE_APP_API_INTEGRATION.md`
+7. `AI Booking Assistant_ Features and Flow.md`
 
 ## Non-Negotiables
 

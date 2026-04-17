@@ -78,6 +78,7 @@ Notes:
 Notes:
 - Worker endpoints require authenticated user role `worker` or admin override.
 - If admin disables a section, related worker endpoints must return `403`.
+- Full request/response integration guide is in `docs/MOBILE_APP_API_INTEGRATION.md`.
 
 ## Media APIs
 
