@@ -13,9 +13,11 @@
 - **Phase 6 Track 4 complete:** Realtime SSE sync integrated for admin and worker sessions, permission refresh propagation implemented, and Track 4 RBAC realtime regression + UAT checklist updates landed.
 - **Phase 6 launch hardening update (2026-04-17):** release-candidate quality gate executed and green (`ruff`, `mypy`, full backend `pytest`, focused Track 4 realtime regression, frontend `npm run build`).
 - **Launch execution update (2026-04-17):** full UAT checklist run completed with automated evidence captured for Phase 5 reliability and Phase 6 auth/RBAC/realtime scenarios.
+- **Launch governance closeout update (2026-04-17):** RC freeze recorded at commit `0449221c3f90e6fc794e32f5c98957910ddb8e85`; final quality gate re-run remains green with no drift.
+- **Launch decision status (2026-04-17):** **NO-GO** pending explicit Product/Engineering approvals and ops rollback/alert governance confirmations.
 - Twilio webhook contract verified in tests: webhook returns empty TwiML response while outbound delivery is handled by orchestrator-side send flow.
 - Frontend build warning hardening applied by setting `turbopack.root` in `frontend/next.config.ts`.
-- **Current active workstream:** external launch governance closeout (ops checks + Product/Engineering approval capture).
+- **Current active workstream:** governance blockers resolution (collect named approvals, rollback owner ack, and alert-threshold confirmations to flip decision to GO).
 
 ## Source-of-Truth Files (Read First)
 
