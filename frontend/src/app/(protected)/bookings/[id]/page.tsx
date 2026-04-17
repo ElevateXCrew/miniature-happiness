@@ -1,7 +1,9 @@
 'use client';
 
+import React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { MessageCircle, FileText, Bell, ImageIcon, Dot } from 'lucide-react';
 import { bookingsApi, mediaApi } from '@/lib/adminApi';
 import { Badge, bookingStatusColor } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -18,13 +20,13 @@ const fmt = (iso: string | null) =>
     ? new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
     : '—';
 
-function timelineIcon(kind: TimelineItem['kind']): string {
+function timelineIcon(kind: TimelineItem['kind']): React.ReactNode {
   switch (kind) {
-    case 'message':      return '💬';
-    case 'audit':        return '📝';
-    case 'notification': return '🔔';
-    case 'media':        return '🖼️';
-    default:             return '•';
+    case 'message':      return <MessageCircle size={14} />;
+    case 'audit':        return <FileText size={14} />;
+    case 'notification': return <Bell size={14} />;
+    case 'media':        return <ImageIcon size={14} />;
+    default:             return <Dot size={14} />;
   }
 }
 
@@ -252,7 +254,7 @@ export default function BookingDetailPage() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={m.source_url} alt={m.media_type} className={styles.mediaImg} />
                       ) : (
-                        <span className={styles.mediaPlaceholder}>🖼️</span>
+                        <span className={styles.mediaPlaceholder}><ImageIcon size={32} /></span>
                       )}
                     </div>
                     <div className={styles.mediaMeta}>

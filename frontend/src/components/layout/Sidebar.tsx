@@ -4,8 +4,19 @@
 // Sidebar — role-aware navigation with section guards.
 // ============================================================
 
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {
+  LayoutDashboard,
+  BookOpen,
+  MessageCircle,
+  ImageIcon,
+  Bell,
+  CalendarDays,
+  Settings,
+  BriefcaseBusiness,
+} from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import type { SectionKey } from '@/types';
 import styles from './Sidebar.module.css';
@@ -20,18 +31,18 @@ interface NavItem {
   sectionKey?: SectionKey;
   adminOnly?: boolean;
   workerOnly?: boolean;
-  icon: string; // emoji / unicode icon (no icon lib dep)
+  icon: React.ReactNode;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',     href: '/dashboard',     sectionKey: 'dashboard',     icon: '⬛' },
-  { label: 'Bookings',      href: '/bookings',       sectionKey: 'bookings',      icon: '📋' },
-  { label: 'Live Chat',     href: '/sessions',       sectionKey: 'live_chat',     icon: '💬' },
-  { label: 'Media',         href: '/media',          sectionKey: 'media',         icon: '🖼️' },
-  { label: 'Notifications', href: '/notifications',  sectionKey: 'notifications', icon: '🔔' },
-  { label: 'Schedule',      href: '/schedule',       sectionKey: 'schedule',      icon: '📅' },
-  { label: 'Settings',      href: '/settings',       adminOnly: true,             icon: '⚙️' },
-  { label: 'Worker Portal', href: '/worker',         workerOnly: true,            icon: '👜' },
+  { label: 'Dashboard',     href: '/dashboard',     sectionKey: 'dashboard',     icon: <LayoutDashboard size={18} /> },
+  { label: 'Bookings',      href: '/bookings',       sectionKey: 'bookings',      icon: <BookOpen size={18} /> },
+  { label: 'Live Chat',     href: '/sessions',       sectionKey: 'live_chat',     icon: <MessageCircle size={18} /> },
+  { label: 'Media',         href: '/media',          sectionKey: 'media',         icon: <ImageIcon size={18} /> },
+  { label: 'Notifications', href: '/notifications',  sectionKey: 'notifications', icon: <Bell size={18} /> },
+  { label: 'Schedule',      href: '/schedule',       sectionKey: 'schedule',      icon: <CalendarDays size={18} /> },
+  { label: 'Settings',      href: '/settings',       adminOnly: true,             icon: <Settings size={18} /> },
+  { label: 'Worker Portal', href: '/worker',         workerOnly: true,            icon: <BriefcaseBusiness size={18} /> },
 ];
 
 // ----------------------------------------------------------

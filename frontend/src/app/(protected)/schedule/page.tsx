@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { LockKeyhole, AlertTriangle } from 'lucide-react';
 import { workerPortalApi } from '@/lib/adminApi';
 import { useAuth } from '@/context/AuthContext';
 import { useSectionAccess } from '@/hooks/useAuth';
@@ -33,7 +34,7 @@ export default function SchedulePage() {
           <h1 className={styles.pageTitle}>Schedule</h1>
         </header>
         <EmptyState
-          icon="🔒"
+          icon={<LockKeyhole size={40} />}
           title="Schedule section disabled"
           description="Your admin has not enabled the schedule section for your account."
         />
@@ -45,7 +46,7 @@ export default function SchedulePage() {
     return (
       <div className={styles.page}>
         <EmptyState
-          icon="⚠️"
+          icon={<AlertTriangle size={40} />}
           title="Worker account not linked"
           description="Your user account is not linked to a worker record."
         />
@@ -65,7 +66,7 @@ export default function SchedulePage() {
       <div className={styles.cards}>
         {/* Free Now card */}
         <div className={styles.card}>
-          <h2 className={styles.cardTitle}>🟢 Free Now</h2>
+          <h2 className={styles.cardTitle}>Free Now</h2>
           <p className={styles.cardDesc}>
             Signal that you are immediately available to take new bookings.
             This sends a &quot;free now&quot; availability command to the backend.

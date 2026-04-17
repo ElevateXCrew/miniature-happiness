@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import {
+  BriefcaseBusiness, AlertTriangle, LockKeyhole, CalendarDays,
+  MapPin, Car, Timer, User,
+} from 'lucide-react';
 import { workerPortalApi } from '@/lib/adminApi';
 import { useAuth } from '@/context/AuthContext';
 import { useSectionAccess } from '@/hooks/useAuth';
@@ -109,7 +113,7 @@ export default function WorkerPortalPage() {
           <p className={styles.pageSub}>Admin view — no worker account linked to this login.</p>
         </header>
         <EmptyState
-          icon="👜"
+          icon={<BriefcaseBusiness size={40} />}
           title="No worker record linked"
           description="This admin account has no worker_id. Log in as a worker to use the portal."
         />
@@ -122,7 +126,7 @@ export default function WorkerPortalPage() {
     return (
       <div className={styles.page}>
         <EmptyState
-          icon="⚠️"
+          icon={<AlertTriangle size={40} />}
           title="Worker account not linked"
           description="Your user account is not linked to a worker record. Contact your admin."
         />
@@ -159,7 +163,7 @@ export default function WorkerPortalPage() {
 
           {!hasBookings && !isAdmin ? (
             <EmptyState
-              icon="🔒"
+              icon={<LockKeyhole size={40} />}
               title="Bookings section disabled"
               description="Your admin has not enabled the bookings section for your account."
             />
@@ -167,7 +171,7 @@ export default function WorkerPortalPage() {
             <div className={styles.loadingRow}><Spinner /></div>
           ) : bookings.length === 0 ? (
             <EmptyState
-              icon="📅"
+              icon={<CalendarDays size={40} />}
               title="No upcoming bookings"
               description="You have no confirmed bookings scheduled ahead."
             />
@@ -187,13 +191,15 @@ export default function WorkerPortalPage() {
 
                   <div className={styles.bookingDetails}>
                     <span className={styles.detailChip}>
-                      {b.booking_type === 'incall' ? '📍 Incall' : '🚗 Outcall'}
+                      {b.booking_type === 'incall'
+                        ? <><MapPin size={12} /> Incall</>
+                        : <><Car size={12} /> Outcall</>}
                     </span>
                     {b.duration_minutes && (
-                      <span className={styles.detailChip}>⏱ {b.duration_minutes} min</span>
+                      <span className={styles.detailChip}><Timer size={12} /> {b.duration_minutes} min</span>
                     )}
                     {b.client_name && (
-                      <span className={styles.detailChip}>👤 {b.client_name}</span>
+                      <span className={styles.detailChip}><User size={12} /> {b.client_name}</span>
                     )}
                   </div>
 
@@ -206,7 +212,7 @@ export default function WorkerPortalPage() {
                         loading={actionLoading === b.id + 'approve'}
                         onClick={() => doAction(b.id, 'approve')}
                       >
-                        ✓ Approve
+                        Approve
                       </Button>
                       <Button
                         id={`worker-reject-${b.id}`}
@@ -215,7 +221,7 @@ export default function WorkerPortalPage() {
                         loading={actionLoading === b.id + 'reject'}
                         onClick={() => doAction(b.id, 'reject')}
                       >
-                        ✗ Reject
+                        Reject
                       </Button>
                       {b.status === 'confirmed' && (
                         <Button
@@ -225,7 +231,7 @@ export default function WorkerPortalPage() {
                           loading={actionLoading === b.id + 'completeEarly'}
                           onClick={() => doAction(b.id, 'completeEarly')}
                         >
-                          ✓ Complete early
+                          Complete early
                         </Button>
                       )}
                       <Link href={`/bookings/${b.id}`} className={styles.detailLink}>
@@ -256,7 +262,7 @@ export default function WorkerPortalPage() {
                   loading={actionLoading === 'freeNow'}
                   onClick={doFreeNow}
                 >
-                  🟢 Free Now
+                  Free Now
                 </Button>
                 {freeNowResult && (
                   <p className={styles.commandResult}>{freeNowResult}</p>

@@ -1,12 +1,14 @@
+import React from 'react';
+import { Inbox } from 'lucide-react';
 import styles from './EmptyState.module.css';
 
 interface Props {
-  icon?: string;
+  icon?: React.ReactNode;
   title: string;
   description?: string;
 }
 
-export function EmptyState({ icon = '📭', title, description }: Props) {
+export function EmptyState({ icon = <Inbox size={40} />, title, description }: Props) {
   return (
     <div className={styles.wrapper}>
       <span className={styles.icon} aria-hidden>{icon}</span>

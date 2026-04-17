@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { ClipboardList, Bell, AlertTriangle, Wrench } from 'lucide-react';
 import { metricsApi, bookingsApi, notificationsApi } from '@/lib/adminApi';
 import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -157,28 +157,28 @@ export default function DashboardPage() {
       {/* KPI Row */}
       <section className={styles.kpiGrid} aria-label="Key metrics">
         <KpiCard
-          icon="📋"
+          icon={<ClipboardList size={20} />}
           label="Pending Reviews"
           value={metrics?.pending_reviews ?? '—'}
           accent={metrics && metrics.pending_reviews > 0 ? 'warning' : 'default'}
           description="Bookings awaiting admin decision"
         />
         <KpiCard
-          icon="🔔"
+          icon={<Bell size={20} />}
           label="Queued Notifications"
           value={metrics?.queued_due_notifications ?? '—'}
           accent="default"
           description="Due notifications in dispatch queue"
         />
         <KpiCard
-          icon="⚠️"
+          icon={<AlertTriangle size={20} />}
           label="Reminder Failures"
           value={metrics?.reminder_failures ?? '—'}
           accent={metrics && metrics.reminder_failures > 0 ? 'danger' : 'default'}
           description="Failed reminder send attempts"
         />
         <KpiCard
-          icon="🔧"
+          icon={<Wrench size={20} />}
           label="Failed Tool Calls"
           value={metrics?.failed_tool_calls ?? '—'}
           accent={metrics && metrics.failed_tool_calls > 0 ? 'danger' : 'default'}

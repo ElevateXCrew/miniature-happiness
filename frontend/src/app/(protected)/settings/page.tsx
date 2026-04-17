@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { User } from 'lucide-react';
 import { workersApi } from '@/lib/adminApi';
 import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { Badge } from '@/components/ui/Badge';
@@ -81,7 +82,7 @@ export default function SettingsPage() {
         {loading ? (
           <div className={styles.loadingRow}><Spinner /></div>
         ) : workers.length === 0 ? (
-          <EmptyState icon="👤" title="No worker accounts found"
+          <EmptyState icon={<User size={40} />} title="No worker accounts found"
             description="Create a worker user to manage their section access." />
         ) : (
           <div className={styles.tableWrap}>
