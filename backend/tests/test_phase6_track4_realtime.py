@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routers.events import is_worker_event_visible

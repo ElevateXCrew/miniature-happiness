@@ -100,7 +100,7 @@ Proceed to launch only when all UAT matrix scenarios are green and no unresolved
 
 ### Phase 6 Launch Sign-off
 
-- [ ] Backend tests include Track 4 realtime/RBAC regression coverage and pass.
+- [x] Backend tests include Track 4 realtime/RBAC regression coverage and pass.
 - [ ] Worker/admin realtime stream behavior validated in staging.
 - [ ] Permission toggles propagate instantly to active worker sessions.
 - [ ] Product + Engineering approval captured for admin panel launch.

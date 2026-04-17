@@ -12,20 +12,16 @@ Environment variables (same as backend):
 
 import asyncio
 import os
-import sys
 
 # ---- ensure backend package is importable when run as module ----
 
 
 async def main() -> None:
     # Import lazily so we don't drag in deps before path is set
-    from sqlalchemy import select
-
     from app.db.engine import AsyncSessionLocal
     from app.models.enums import UserRole
-    from app.models.user import User
     from app.repositories.user_repo import UserRepository
-    from app.services.auth_service import AuthService
+    from app.services.auth_service import hash_password
 
     admin_email = os.getenv("ADMIN_EMAIL", "admin@alysha.local")
     admin_password = os.getenv("ADMIN_PASSWORD", "changeme123")
@@ -38,10 +34,9 @@ async def main() -> None:
         if existing:
             print(f"[seed] Admin user already exists: {existing.email} (id={existing.id})")
         else:
-            auth_svc = AuthService(db)
-            user = await auth_svc.create_user(
+            user = await user_repo.create_user(
                 email=admin_email,
-                password=admin_password,
+                password_hash=hash_password(admin_password),
                 role=UserRole.ADMIN,
             )
             await db.commit()

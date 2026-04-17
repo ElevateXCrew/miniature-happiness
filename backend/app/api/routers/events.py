@@ -22,7 +22,11 @@ def _encode_sse(event_id: int | None, payload: dict[str, object]) -> str:
     return f"id: {event_id}\ndata: {serialized}\n\n"
 
 
-def is_worker_event_visible(worker_user_id: str, event_type: str, payload: dict[str, object]) -> bool:
+def is_worker_event_visible(
+    worker_user_id: str,
+    event_type: str,
+    payload: dict[str, object],
+) -> bool:
     if event_type != "worker.permissions.updated":
         return False
     return payload.get("worker_user_id") == worker_user_id

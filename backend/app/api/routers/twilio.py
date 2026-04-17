@@ -59,7 +59,7 @@ async def _handle_twilio_channel(
         raise HTTPException(status_code=422, detail="Missing required Twilio fields")
 
     orchestrator = ConversationOrchestrator(db)
-    result = await orchestrator.process_incoming(
+    await orchestrator.process_incoming(
         channel=channel,
         phone_e164=from_phone,
         inbound_text=inbound_text,
