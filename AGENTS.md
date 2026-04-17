@@ -4,7 +4,7 @@
 
 - **Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 Complete:** deterministic backend, Twilio SMS/WhatsApp orchestration, admin lifecycle APIs, worker sync flows, client decision messaging, media enrichment, branch constraints, reminder hardening, and reliability controls are implemented.
 - Conversation flow supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
-- Current backend test status: **38 passing tests**.
+- Current backend test status: **40 passing tests**.
 - Phase 5 reliability hardening is implemented (dedup/out-of-order handling, retry/dead-letter, metrics, resilience tests).
 - **Phase 6 Track 0 complete:** backend JWT auth + RBAC schema/APIs and backend authorization guards are implemented.
 - **Phase 6 Track 1 complete:** Next.js 14 frontend shell, auth flow, role-aware sidebar, and route guards are implemented at `frontend/`.
@@ -53,7 +53,7 @@
 - ✅ NotificationService: Reminder scheduling (T-20 minutes with type-specific templates)
 - ✅ WorkerService: Worker command parsing and availability overrides
 - ✅ ToolRunner: All 19 tools as callable async functions returning structured results
-- ✅ 6 API routers: health, admin (booking approve/reject/cancel/edit, pause/resume), worker, media, notifications, events (SSE stub)
+- ✅ 6 API routers: health, admin (booking approve/reject/cancel/edit, pause/resume), worker, media, notifications, events (admin/worker SSE streams with resume + keepalive)
 - ✅ Initial Alembic migration with all tables, indexes, constraints
 - ✅ Test suite: 5 availability tests, 6 booking state machine tests, 3 idempotency tests, 2 health tests
 
@@ -73,7 +73,7 @@
 - `backend/app/api/routers/` — core/admin/worker/media/notifications/events + twilio + agent + metrics
 - `backend/alembic/versions/001_initial_schema.py` — Full initial migration
 - `backend/alembic/versions/002_phase5_reliability.py` — Phase 5 retry/dead-letter schema upgrade
-- `backend/tests/` — 34 tests covering availability, state machine, idempotency, orchestration, lifecycle, and phase-5 reliability hardening
+- `backend/tests/` — 40 tests covering availability, state machine, idempotency, orchestration, lifecycle, phase-5 reliability hardening, and phase-6 auth/realtime regression paths
 
 **Phase 2 Summary (Completed):**
 - ✅ Twilio webhook ingestion routes for SMS and WhatsApp
@@ -184,7 +184,7 @@
 - ✅ Worker realtime stream endpoint added (`GET /events/worker/stream`) with worker-only RBAC and worker-target filtering.
 - ✅ Permission updates now propagate to active worker sessions, triggering immediate `/ui/sections` refresh without re-login.
 - ✅ Notification lifecycle events (`notification.created`, `notification.status_changed`) now publish to realtime stream for queue/KPI freshness.
-- ✅ Track 4 regression tests added (`backend/tests/test_phase6_track4_realtime.py`) covering stream RBAC guards and worker-targeted permission delivery.
+- ✅ Track 4 regression tests added (`backend/tests/test_phase6_track4_realtime.py`) covering stream RBAC guards and worker event-target filtering logic.
 - ✅ Track 4 UAT + launch checklist addendum added to `docs/PHASE5_UAT_LAUNCH_CHECKLIST.md`.
 
 ## Implementation Order (Do Not Skip)
@@ -331,6 +331,7 @@ cd backend && python -m app.scripts.seed_users
 1. `ruff check .`
 2. `mypy app`
 3. `pytest`
+4. `python -m pytest tests/test_phase6_track4_realtime.py -q` (focused Track 4 realtime regression)
 
 ### Frontend (run from `frontend/`)
 1. `npm run build` — verify TypeScript + compilation

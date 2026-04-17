@@ -1,62 +1,48 @@
-# Implementation Backlog (Phase 6 Active)
+# Implementation Backlog (Post-Phase 6 Launch Hardening)
 
-This backlog is ordered and dependency-aware for Admin Panel + RBAC delivery.
+This backlog is the execution queue after Phase 6 feature delivery.
+Use it for launch readiness, regression safety, and handoff continuity.
 
-## 0) Backend Auth and RBAC Foundation (Do First)
+## Status Snapshot
 
-- [ ] Add DB migration for `users` and `worker_section_permissions`.
-- [ ] Add `user_role` and `section_key` enums to model layer.
-- [ ] Implement auth service (password verification, JWT access, refresh token flow).
-- [ ] Add auth endpoints: `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/me`.
-- [ ] Add RBAC permission service and section evaluator.
-- [ ] Add admin endpoints to manage worker section permissions.
-- [ ] Add audit events for permission changes.
+- Phase 6 Tracks 0-4 are implemented and integrated.
+- Admin/worker realtime sync and RBAC propagation are implemented.
+- Remaining work is focused on UAT execution, release sign-off, and operational hardening.
 
-## 1) Backend Authorization Guards
+## Completed Delivery Baseline (Do Not Re-open Without Product Direction)
 
-- [ ] Add reusable dependencies for role checks (`admin`, `worker`).
-- [ ] Add section guard dependency (ex: `require_section("live_chat")`).
-- [ ] Enforce `403` on disabled worker sections across protected APIs.
-- [ ] Add `/ui/sections` endpoint returning effective section map.
-- [ ] Add tests for unauthorized access and permission toggles.
+- [x] Backend auth/RBAC foundation (users, section permissions, JWT auth APIs).
+- [x] Backend role + section authorization guards with `403` enforcement.
+- [x] Next.js auth shell with role-aware sidebar and route guards.
+- [x] Admin panel core screens (dashboard, bookings, timeline, sessions, notifications, settings).
+- [x] Worker portal and permission-gated operational actions.
+- [x] Realtime SSE sync for admin/worker, including permission refresh propagation.
+- [x] Track 4 regression coverage and UAT checklist addendum.
 
-## 2) Next.js Auth and App Shell
+## 1) Release Candidate Quality Gate (High Priority)
 
-- [ ] Scaffold Next.js app with login and protected layouts.
-- [ ] Add session bootstrap flow (`/auth/me` + `/ui/sections`).
-- [ ] Implement token refresh handling.
-- [ ] Build role-aware sidebar/menu.
-- [ ] Add route guards for role + section visibility.
+- [ ] Run backend gate in `backend/`: `ruff check .`, `mypy app`, `pytest`.
+- [ ] Run focused realtime regression: `python -m pytest tests/test_phase6_track4_realtime.py -q`.
+- [ ] Run frontend gate in `frontend/`: `npm run build` (must pass with 0 TypeScript errors).
 
-## 3) Admin Panel Screens
+## 2) Phase 6 UAT Execution (High Priority)
 
-- [ ] Dashboard (pending review, notification/risk highlights).
-- [ ] Booking queue with filters and pagination.
-- [ ] Booking detail with lifecycle actions.
-- [ ] Booking timeline (message/media/audit/notification stream).
-- [ ] Media and receipt review panel.
-- [ ] Active sessions and live monitoring panel.
-- [ ] Agent pause/resume controls.
-- [ ] Notification center.
-- [ ] Worker access management screen.
+- [ ] Execute Phase 6 Track 4 realtime/RBAC UAT matrix in staging.
+- [ ] Validate worker permission propagation during active sessions (no re-login).
+- [ ] Validate stream RBAC guards and worker-target filtering behavior.
 
-## 4) Worker Portal Screens
+## 3) Release Governance and Documentation (Medium Priority)
 
-- [ ] Worker home with upcoming bookings.
-- [ ] Worker action controls (approve/reject/complete-early/free-now).
-- [ ] Worker reminders/notifications panel.
-- [ ] Permission-aware section visibility across worker UI.
+- [ ] Capture Product + Engineering sign-off for launch.
+- [ ] Keep `docs/API_ENDPOINTS.md` and `docs/WORKFLOWS.md` in sync with any release-critical behavior changes.
+- [ ] Keep `AGENTS.md` and `IMPLEMENTAION_PLAN.md` aligned when status changes.
 
-## 5) Realtime Integration
+## 4) Post-Launch Monitoring Readiness (Medium Priority)
 
-- [ ] Connect admin UI to `/events/admin/stream`.
-- [ ] Handle `Last-Event-ID` resume logic.
-- [ ] Reflect booking/notification/permission updates without full reload.
+- [ ] Review retry/dead-letter behavior and notification queue health during staging soak.
+- [ ] Confirm dashboards/alerts around `GET /metrics` counters are actionable for ops.
 
-## 6) QA and Launch Gate
+## 5) Future Scope Parking Lot (Low Priority)
 
-- [ ] Backend quality gate: `ruff check .` -> `mypy app` -> `pytest`.
-- [ ] RBAC regression tests (UI hidden + API `403`).
-- [ ] E2E workflow checks for admin review lifecycle.
-- [ ] E2E check: disable `live_chat` for worker and verify immediate enforcement.
-- [ ] Extend UAT checklist with Phase 6 auth/RBAC/admin-panel scenarios.
+- [ ] Define mobile worker app scope beyond current worker web portal.
+- [ ] Evaluate additional realtime UX resilience (offline recovery, backpressure handling, stream diagnostics).
