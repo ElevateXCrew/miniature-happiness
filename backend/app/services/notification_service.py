@@ -28,6 +28,7 @@ from app.repositories.message_repo import MessageRepository
 from app.repositories.notification_repo import NotificationRepository
 from app.repositories.session_repo import SessionRepository
 from app.repositories.worker_repo import WorkerRepository
+from app.services.event_stream import admin_event_stream
 from app.services.twilio_gateway import TwilioGateway
 
 
@@ -41,6 +42,19 @@ class NotificationService:
         self.workers = WorkerRepository(db)
         self.messages = MessageRepository(db)
         self.gateway = TwilioGateway()
+
+    def _emit_notification_event(self, event_type: str, notif: Notification) -> None:
+        admin_event_stream.publish(
+            event_type,
+            {
+                "notification_id": str(notif.id),
+                "booking_id": str(notif.booking_id) if notif.booking_id else None,
+                "status": notif.status.value,
+                "template_key": notif.template_key,
+                "target_type": notif.target_type.value,
+                "send_at": notif.send_at.isoformat(),
+            },
+        )
 
     async def _render_text(self, notif: Notification) -> str:
         payload = notif.payload if isinstance(notif.payload, dict) else {}
@@ -197,7 +211,9 @@ class NotificationService:
             status=NotificationStatus.QUEUED,
             send_at=send_at,
         )
-        return await self.repo.save(notification)
+        saved = await self.repo.save(notification)
+        self._emit_notification_event("notification.created", saved)
+        return saved
 
     async def schedule_booking_reminders(
         self,
@@ -301,7 +317,8 @@ class NotificationService:
             notif.sent_at = datetime.now(UTC)
             notif.last_error = None
             notif.next_retry_at = None
-            await self.repo.save(notif)
+            saved = await self.repo.save(notif)
+            self._emit_notification_event("notification.status_changed", saved)
             metrics.incr("notifications_sent_total")
 
     async def mark_failed(
@@ -331,6 +348,7 @@ class NotificationService:
             metrics.incr("notifications_dead_letter_total")
 
         await self.repo.save(notif)
+        self._emit_notification_event("notification.status_changed", notif)
         metrics.incr("notifications_failed_total")
         return notif.status
 

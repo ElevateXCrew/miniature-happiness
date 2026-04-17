@@ -10,7 +10,8 @@
 - **Phase 6 Track 1 complete:** Next.js 14 frontend shell, auth flow, role-aware sidebar, and route guards are implemented at `frontend/`.
 - **Phase 6 Track 2 complete:** Admin core screens implemented — dashboard (KPIs + recent activity), booking queue (filterable + paginated + inline actions), booking detail + timeline, media gallery + receipt marking, active sessions + pause/resume, notification center, and worker section access settings.
 - **Phase 6 Track 3 complete:** Worker portal implemented — upcoming bookings with approve/reject/complete-early, Free Now availability command, Send Message to active chat, permission-gated views per admin section toggles.
-- **Current active workstream: Phase 6 Track 4** (Realtime SSE sync + RBAC regression/UAT and launch checks).
+- **Phase 6 Track 4 complete:** Realtime SSE sync integrated for admin and worker sessions, permission refresh propagation implemented, and Track 4 RBAC realtime regression + UAT checklist updates landed.
+- **Current active workstream:** Phase 6 launch hardening and staged UAT sign-off.
 
 ## Source-of-Truth Files (Read First)
 
@@ -178,6 +179,14 @@
 - `frontend/src/app/(protected)/schedule/page.tsx` — availability management
 - `frontend/src/lib/adminApi.ts` — `workerPortalApi` added
 
+**Phase 6 Track 4 Summary (Completed):**
+- ✅ Admin realtime sync integrated via authenticated SSE stream consumption and UI auto-refresh wiring for dashboard/bookings/sessions/notifications/settings.
+- ✅ Worker realtime stream endpoint added (`GET /events/worker/stream`) with worker-only RBAC and worker-target filtering.
+- ✅ Permission updates now propagate to active worker sessions, triggering immediate `/ui/sections` refresh without re-login.
+- ✅ Notification lifecycle events (`notification.created`, `notification.status_changed`) now publish to realtime stream for queue/KPI freshness.
+- ✅ Track 4 regression tests added (`backend/tests/test_phase6_track4_realtime.py`) covering stream RBAC guards and worker-targeted permission delivery.
+- ✅ Track 4 UAT + launch checklist addendum added to `docs/PHASE5_UAT_LAUNCH_CHECKLIST.md`.
+
 ## Implementation Order (Do Not Skip)
 
 - Start with Phase 1 from `IMPLEMENTAION_PLAN.md` before channel/LLM/admin work.
@@ -189,7 +198,7 @@
   3. ✅ Next.js auth shell and role-aware route/menu guards (Track 1).
   4. ✅ Admin core screens — dashboard, bookings, sessions, notifications, settings (Track 2).
   5. ✅ Worker portal — upcoming bookings, worker actions, permission-gated views (Track 3).
-  6. 🔄 Realtime SSE sync + RBAC regression/UAT and launch checks (Track 4 — active).
+   6. ✅ Realtime SSE sync + RBAC regression/UAT and launch checks (Track 4).
 
 ## AI Agent Roles for Phase 3+
 

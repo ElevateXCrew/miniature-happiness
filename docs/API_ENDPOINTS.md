@@ -108,7 +108,10 @@ Notes:
 ## Realtime Sync
 
 - `GET /events/admin/stream` (SSE or websocket equivalent)
+- `GET /events/worker/stream` (SSE)
 
 Notes:
 - Stream now emits booking lifecycle and worker sync events with incremental `id` for resume via `Last-Event-ID`.
-- Stream should also emit worker permission updates so worker/admin UI can refresh access instantly.
+- Admin stream emits booking lifecycle, worker command, permission, and notification lifecycle events.
+- Worker stream is role-guarded (`worker` only) and emits only worker-targeted permission updates.
+- Both streams send a connection event (`admin_stream.connected`, `worker_stream.connected`) and keepalive comments.

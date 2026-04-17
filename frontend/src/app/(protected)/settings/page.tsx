@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { workersApi } from '@/lib/adminApi';
+import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { SectionKey, SectionMap, WorkerSectionPermissions, WorkerUser } from '@/types';
+import type { StreamEnvelope } from '@/lib/realtime';
 import styles from './page.module.css';
 
 const SECTION_KEYS: SectionKey[] = [
@@ -44,6 +46,13 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { loadWorkers(); }, [loadWorkers]);
+
+  useAdminRealtimeRefresh(
+    (event: StreamEnvelope) => event.type === 'worker.permissions.updated',
+    () => {
+      void loadWorkers();
+    },
+  );
 
   const toggle = async (workerId: string, key: SectionKey, current: boolean) => {
     setSaving(workerId + key);

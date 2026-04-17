@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { notificationsApi } from '@/lib/adminApi';
+import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { NotificationItem } from '@/types';
+import type { StreamEnvelope } from '@/lib/realtime';
 import styles from './page.module.css';
 
 function notifColor(status: string): 'success' | 'warning' | 'danger' | 'default' {
@@ -32,6 +34,13 @@ export default function NotificationsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useAdminRealtimeRefresh(
+    (event: StreamEnvelope) => event.type.startsWith('notification.'),
+    () => {
+      void load();
+    },
+  );
 
   const showToast = (msg: string) => {
     setToast(msg);

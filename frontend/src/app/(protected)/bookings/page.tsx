@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { bookingsApi } from '@/lib/adminApi';
+import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { Badge, bookingStatusColor } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { BookingStatus, BookingSummary } from '@/types';
+import type { StreamEnvelope } from '@/lib/realtime';
 import styles from './page.module.css';
 
 const LIMIT = 20;
@@ -44,6 +46,14 @@ export default function BookingsPage() {
   }, [filter, offset]);
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
+
+  useAdminRealtimeRefresh(
+    (event: StreamEnvelope) =>
+      event.type.startsWith('booking.') || event.type.startsWith('worker.'),
+    () => {
+      void fetchBookings();
+    },
+  );
 
   const doAction = async (
     id: string,

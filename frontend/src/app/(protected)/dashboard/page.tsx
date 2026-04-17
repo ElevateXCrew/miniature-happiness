@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { metricsApi, bookingsApi, notificationsApi } from '@/lib/adminApi';
+import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { Badge, bookingStatusColor } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import type { Metrics, BookingSummary, NotificationItem } from '@/types';
+import type { StreamEnvelope } from '@/lib/realtime';
 import styles from './page.module.css';
 
 export default function DashboardPage() {
@@ -15,9 +17,20 @@ export default function DashboardPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const load = useCallback(async () => {
+    const [m, b, n] = await Promise.all([
+      metricsApi.get(),
+      bookingsApi.list({ limit: 5 }),
+      notificationsApi.list(),
+    ]);
+    setMetrics(m);
+    setBookings(b);
+    setNotifications(n.slice(0, 5));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
+    const runInitialLoad = async () => {
       try {
         const [m, b, n] = await Promise.all([
           metricsApi.get(),
@@ -32,9 +45,19 @@ export default function DashboardPage() {
         if (!cancelled) setLoading(false);
       }
     };
-    load();
+    runInitialLoad();
     return () => { cancelled = true; };
   }, []);
+
+  useAdminRealtimeRefresh(
+    (event: StreamEnvelope) =>
+      event.type.startsWith('booking.')
+      || event.type.startsWith('notification.')
+      || event.type.startsWith('worker.'),
+    () => {
+      void load();
+    },
+  );
 
   if (loading) {
     return (
