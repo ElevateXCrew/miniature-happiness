@@ -8,9 +8,13 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # Import all models so their metadata is registered
 import app.models  # noqa: F401
 from alembic import context
+from app.core.config import settings
 from app.db.base import Base
 
 config = context.config
+
+# Keep migration target DB in sync with runtime app DB URL from .env.
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

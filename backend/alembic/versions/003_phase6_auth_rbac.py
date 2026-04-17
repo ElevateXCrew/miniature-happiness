@@ -20,7 +20,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    user_role = postgresql.ENUM("admin", "worker", name="user_role")
+    user_role = postgresql.ENUM("admin", "worker", name="user_role", create_type=False)
     user_role.create(op.get_bind(), checkfirst=True)
 
     section_key = postgresql.ENUM(
@@ -33,6 +33,7 @@ def upgrade() -> None:
         "schedule",
         "settings",
         name="section_key",
+        create_type=False,
     )
     section_key.create(op.get_bind(), checkfirst=True)
 
@@ -43,7 +44,7 @@ def upgrade() -> None:
         sa.Column("password_hash", sa.Text(), nullable=False),
         sa.Column(
             "role",
-            sa.Enum("admin", "worker", name="user_role"),
+            user_role,
             nullable=False,
         ),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
@@ -75,17 +76,7 @@ def upgrade() -> None:
         sa.Column("worker_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "section_key",
-            sa.Enum(
-                "dashboard",
-                "live_chat",
-                "bookings",
-                "timeline",
-                "media",
-                "notifications",
-                "schedule",
-                "settings",
-                name="section_key",
-            ),
+            section_key,
             nullable=False,
         ),
         sa.Column("can_view", sa.Boolean(), nullable=False, server_default="true"),

@@ -20,21 +20,30 @@ class ConversationSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "conversation_sessions"
 
     client_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), ForeignKey("clients.id"), nullable=False
+        Uuid(as_uuid=True, native_uuid=True), ForeignKey("clients.id"), nullable=False
     )
     worker_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), ForeignKey("workers.id"), nullable=False
+        Uuid(as_uuid=True, native_uuid=True), ForeignKey("workers.id"), nullable=False
     )
     state: Mapped[ConversationState] = mapped_column(
-        Enum(ConversationState, name="conversation_state"),
+        Enum(
+            ConversationState,
+            name="conversation_state",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
         default=ConversationState.IDLE,
     )
     active_booking_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), ForeignKey("bookings.id"), nullable=True
+        Uuid(as_uuid=True, native_uuid=True), ForeignKey("bookings.id"), nullable=True
     )
     last_channel: Mapped[Channel | None] = mapped_column(
-        Enum(Channel, name="channel"), nullable=True
+        Enum(
+            Channel,
+            name="channel",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=True,
     )
     last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

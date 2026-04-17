@@ -24,5 +24,5 @@ class TimestampMixin:
 
 class UUIDPrimaryKeyMixin:
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True, native_uuid=True), primary_key=True, default=uuid.uuid4
     )

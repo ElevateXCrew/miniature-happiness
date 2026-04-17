@@ -4,6 +4,7 @@ Alysha Booking Assistant — FastAPI application entry point.
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,6 +73,7 @@ async def _seed_default_users() -> None:
             user_repo = UserRepository(db)
             worker_repo = WorkerRepository(db)
             worker = await worker_repo.get_active_worker()
+            worker_id = UUID(str(worker.id)) if worker else None
 
             admin = await user_repo.get_by_email(settings.seed_admin_email)
             if not admin:
@@ -88,7 +90,7 @@ async def _seed_default_users() -> None:
                     email=settings.seed_worker_email,
                     password_hash=hash_password(settings.seed_worker_password),
                     role=UserRole.WORKER,
-                    worker_id=worker.id if worker else None,
+                    worker_id=worker_id,
                 )
                 logger.info(
                     "Seeded default worker user",
@@ -96,7 +98,7 @@ async def _seed_default_users() -> None:
                     id=str(worker_user.id),
                 )
             elif worker and worker_user.worker_id is None:
-                worker_user.worker_id = worker.id
+                worker_user.worker_id = worker_id
 
             await db.commit()
         except Exception as e:

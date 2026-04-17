@@ -17,17 +17,24 @@ class BookingMedia(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "booking_media"
 
     client_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), ForeignKey("clients.id"), nullable=False
+        Uuid(as_uuid=True, native_uuid=True), ForeignKey("clients.id"), nullable=False
     )
     booking_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), ForeignKey("bookings.id"), nullable=True
+        Uuid(as_uuid=True, native_uuid=True), ForeignKey("bookings.id"), nullable=True
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False),
+        Uuid(as_uuid=True, native_uuid=True),
         ForeignKey("conversation_sessions.id"),
         nullable=False,
     )
-    channel: Mapped[Channel] = mapped_column(Enum(Channel, name="media_channel"), nullable=False)
+    channel: Mapped[Channel] = mapped_column(
+        Enum(
+            Channel,
+            name="media_channel",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+    )
     media_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     twilio_media_sid: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str] = mapped_column(Text, nullable=False)

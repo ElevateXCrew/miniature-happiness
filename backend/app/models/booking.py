@@ -21,23 +21,32 @@ class Booking(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "bookings"
 
     client_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), ForeignKey("clients.id"), nullable=False
+        Uuid(as_uuid=True, native_uuid=True), ForeignKey("clients.id"), nullable=False
     )
     worker_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False), ForeignKey("workers.id"), nullable=False
+        Uuid(as_uuid=True, native_uuid=True), ForeignKey("workers.id"), nullable=False
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False),
+        Uuid(as_uuid=True, native_uuid=True),
         ForeignKey("conversation_sessions.id"),
         nullable=False,
     )
     status: Mapped[BookingStatus] = mapped_column(
-        Enum(BookingStatus, name="booking_status"),
+        Enum(
+            BookingStatus,
+            name="booking_status",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
         default=BookingStatus.DRAFT,
     )
     booking_type: Mapped[BookingType | None] = mapped_column(
-        Enum(BookingType, name="booking_type"), nullable=True
+        Enum(
+            BookingType,
+            name="booking_type",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=True,
     )
 
     # Schedule
@@ -67,7 +76,11 @@ class Booking(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     # Review
     awaiting_review_from: Mapped[AwaitingReviewFrom] = mapped_column(
-        Enum(AwaitingReviewFrom, name="awaiting_review_from"),
+        Enum(
+            AwaitingReviewFrom,
+            name="awaiting_review_from",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
         default=AwaitingReviewFrom.NONE,
     )

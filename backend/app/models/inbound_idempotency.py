@@ -11,7 +11,12 @@ class InboundIdempotency(Base, UUIDPrimaryKeyMixin):
     __tablename__ = "inbound_idempotency"
 
     provider: Mapped[InboundProvider] = mapped_column(
-        Enum(InboundProvider, name="inbound_provider"), nullable=False
+        Enum(
+            InboundProvider,
+            name="inbound_provider",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
     )
     external_id: Mapped[str] = mapped_column(Text, nullable=False)
     processed_at: Mapped[datetime] = mapped_column(

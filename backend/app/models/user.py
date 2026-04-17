@@ -17,12 +17,19 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        Enum(
+            UserRole,
+            name="user_role",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     current_refresh_jti: Mapped[str | None] = mapped_column(Text, nullable=True)
     worker_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True, native_uuid=False),
+        Uuid(as_uuid=True, native_uuid=True),
         ForeignKey("workers.id"),
         nullable=True,
         unique=True,
