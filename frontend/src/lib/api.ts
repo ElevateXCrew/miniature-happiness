@@ -105,9 +105,21 @@ function decodeJwtRole(token: string | null): string {
   }
 }
 
+function shouldLogFailure(path: string, status: number): boolean {
+  // Expected during session bootstrap with stale/rotated refresh tokens.
+  if (path === '/auth/refresh' && status === 401) {
+    return false;
+  }
+  return true;
+}
+
 function logApiFailure(path: string, status: number, detail: string | string[]): void {
+  if (!shouldLogFailure(path, status)) {
+    return;
+  }
+
   const role = decodeJwtRole(getAccessToken());
-  console.error('[api] request failed', {
+  console.warn('[api] request failed', {
     endpoint: path,
     status,
     role,
@@ -139,7 +151,10 @@ async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<
     });
   } catch {
     logApiFailure(path, 0, 'Network error');
-    throw new ApiResponseError(0, 'Network error while contacting server.');
+    throw new ApiResponseError(
+      0,
+      `Network error while contacting server (${BASE_URL}).`,
+    );
   }
 
   // Auto-refresh on 401
