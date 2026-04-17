@@ -7,7 +7,8 @@
 - Current backend test status: **38 passing tests**.
 - Phase 5 reliability hardening is implemented (dedup/out-of-order handling, retry/dead-letter, metrics, resilience tests).
 - **Phase 6 Track 0 complete:** backend JWT auth + RBAC schema/APIs and backend authorization guards are implemented.
-- **Current active workstream: Phase 6 Track 1** (Next.js auth shell + role-aware route/menu guards).
+- **Phase 6 Track 1 complete:** Next.js 14 frontend shell, auth flow, role-aware sidebar, and route guards are implemented at `frontend/`.
+- **Current active workstream: Phase 6 Track 2** (Admin core screens — dashboard, booking queue, detail/timeline, media, sessions, settings).
 
 ## Source-of-Truth Files (Read First)
 
@@ -117,17 +118,41 @@
 - ✅ Added audit + realtime permission update emission on section toggles.
 - ✅ Added Phase 6 regression coverage (`backend/tests/test_phase6_auth_rbac.py`) and kept quality gate green (`ruff`, `mypy`, `pytest`).
 
+**Phase 6 Track 1 Summary (Completed):**
+- ✅ Scaffolded Next.js 14 App Router frontend at `frontend/` (TypeScript, Vanilla CSS, no Tailwind).
+- ✅ Premium dark design system: CSS custom properties, Inter font, violet accent palette, animations.
+- ✅ `AuthContext` with login, logout, and session bootstrap via refresh token + `/auth/me` + `/ui/sections`.
+- ✅ `AuthGuard` component: redirects unauthenticated users to `/login`; blocks disabled sections for workers.
+- ✅ `apiFetch` client with Bearer token injection, automatic 401 → refresh → retry flow, and `ApiResponseError`.
+- ✅ Role-aware `Sidebar`: admin sees all 8 sections; workers see only admin-enabled sections.
+- ✅ `TopBar` with logout, `AppShell` layout with animated page transitions.
+- ✅ Fully functional login page with glassmorphism card, animated ambient blobs, loading state, and error display.
+- ✅ Protected route group (`(protected)/`) with `AuthGuard` + `AppShell` layout.
+- ✅ Styled stub pages for all 8 sections: dashboard, bookings, sessions, media, notifications, schedule, settings, worker.
+- ✅ `backend/app/scripts/seed_users.py` — seeds initial admin user for dev login testing.
+- ✅ Build verified: `npm run build` passes with 0 TypeScript errors, 13 routes generated.
+
+**Relevant Frontend Directories:**
+- `frontend/src/app/` — Next.js App Router pages and layouts
+- `frontend/src/components/auth/` — `LoginForm`, `AuthGuard`
+- `frontend/src/components/layout/` — `Sidebar`, `TopBar`, `AppShell`
+- `frontend/src/components/ui/` — `Button`, `Card`, `Badge`, `Spinner`, `SectionPlaceholder`
+- `frontend/src/context/AuthContext.tsx` — global auth state
+- `frontend/src/lib/api.ts` — fetch API client
+- `frontend/src/types/index.ts` — shared TypeScript types
+- `backend/app/scripts/seed_users.py` — dev admin seed script
+
 ## Implementation Order (Do Not Skip)
 
 - Start with Phase 1 from `IMPLEMENTAION_PLAN.md` before channel/LLM/admin work.
 - Implement DB schema + state machine + deterministic tool services first.
 - Add Twilio/LLM orchestration only after deterministic backend behaviors are testable.
-- **Phase 1 through Phase 5 are complete.** Current sequence for Phase 6 is:
-  1. Backend JWT auth + RBAC schema/API first.
-  2. Backend authorization guards (`403` on disabled sections).
-  3. Next.js auth shell and role-aware route/menu guards.
-  4. Admin/worker screens and realtime sync.
-  5. RBAC regression/UAT and launch checks.
+- **Phase 1 through Phase 5 are complete.** Phase 6 sequence status:
+  1. ✅ Backend JWT auth + RBAC schema/API.
+  2. ✅ Backend authorization guards (`403` on disabled sections).
+  3. ✅ Next.js auth shell and role-aware route/menu guards (Track 1).
+  4. 🔄 Admin/worker screens and realtime sync (Track 2 + 3 — active).
+  5. ⬜ RBAC regression/UAT and launch checks (Track 4).
 
 ## AI Agent Roles for Phase 3+
 
@@ -226,13 +251,46 @@ mypy app
 3. `mypy app`
 4. `pytest`
 
-## Phase 6 Immediate Commands (backend)
+## Commands (frontend — run from `frontend/` directory)
 
-Run from `backend/`:
+### Install dependencies
+```
+npm install
+```
 
+### Run dev server
+```
+npm run dev
+# → http://localhost:3000
+```
+
+### Build (type-check + compile)
+```
+npm run build
+```
+
+### Seed first admin user (requires live backend + DB)
+```
+cd backend && python -m app.scripts.seed_users
+# Default: admin@alysha.local / changeme123
+# Override: ADMIN_EMAIL=... ADMIN_PASSWORD=... python -m app.scripts.seed_users
+```
+
+### Frontend env
+- `frontend/.env.local` — set `NEXT_PUBLIC_API_URL` (default: `http://localhost:8000`)
+
+## Phase 6 Immediate Commands
+
+### Backend (run from `backend/`)
 1. `ruff check .`
 2. `mypy app`
 3. `pytest`
 
-Phase 6 expectation:
-- Keep backend quality gate green while adding auth/RBAC endpoints consumed by Next.js.
+### Frontend (run from `frontend/`)
+1. `npm run build` — verify TypeScript + compilation
+2. `npm run dev` — start dev server
+
+Phase 6 expectations:
+- Backend quality gate (lint + types + tests) stays green throughout.
+- Frontend `npm run build` must pass with 0 TypeScript errors before any PR merge.
+- New admin screens (Track 2) must consume backend APIs via `src/lib/api.ts` only; no direct fetch calls in page components.
