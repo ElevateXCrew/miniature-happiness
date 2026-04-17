@@ -21,9 +21,9 @@ Use it for launch readiness, regression safety, and handoff continuity.
 
 ## 1) Release Candidate Quality Gate (High Priority)
 
-- [ ] Run backend gate in `backend/`: `ruff check .`, `mypy app`, `pytest`.
-- [ ] Run focused realtime regression: `python -m pytest tests/test_phase6_track4_realtime.py -q`.
-- [ ] Run frontend gate in `frontend/`: `npm run build` (must pass with 0 TypeScript errors).
+- [x] Run backend gate in `backend/`: `ruff check .`, `mypy app`, `pytest`.
+- [x] Run focused realtime regression: `python -m pytest tests/test_phase6_track4_realtime.py -q`.
+- [x] Run frontend gate in `frontend/`: `npm run build` (must pass with 0 TypeScript errors).
 
 ## 2) Phase 6 UAT Execution (High Priority)
 
