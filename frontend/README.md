@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Alysha Booking Admin Frontend
 
-## Getting Started
+Next.js 16 admin/worker interface for the Alysha Booking Assistant platform.
 
-First, run the development server:
+This app provides:
+- login and session bootstrap
+- role-aware sidebar and route guards
+- protected admin and worker sections
+- API integration with backend auth + RBAC endpoints
+
+## Prerequisites
+
+- Node.js 20+
+- Backend API running (default: `http://localhost:8000`)
+
+## Setup
+
+From this directory:
+
+```bash
+cd frontend
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create local env config (already added in this workspace):
+
+```bash
+# frontend/.env.local
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+## Run
+
+Development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open:
+- `http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Production build:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+```
 
-## Learn More
+Production start:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Backend Dependency
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The frontend calls backend APIs from `src/lib/api.ts` using:
+- `NEXT_PUBLIC_API_URL` if set
+- fallback: `http://localhost:8000`
 
-## Deploy on Vercel
+Make sure backend is up and healthy:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/ready
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Auth and Seeded Credentials
+
+This frontend relies on backend auth endpoints:
+- `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `GET /auth/me`
+- `GET /ui/sections`
+
+If backend startup seeding is enabled (default), use:
+- admin: `admin@alysha.local` / `admin123`
+- worker: `worker@alysha.local` / `worker123`
+
+If you seeded users with `python -m app.scripts.seed_users`, credentials may differ based on your env overrides.
+
+## Notes
+
+- Build verification in this workspace passes successfully.
+- If you see a Next.js workspace root warning (multiple lockfiles), it is non-blocking. You can silence it later by configuring `turbopack.root` in `next.config.ts`.
