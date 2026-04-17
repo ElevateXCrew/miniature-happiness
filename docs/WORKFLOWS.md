@@ -62,3 +62,17 @@
 2. Backend updates booking state and creates deterministic notifications.
 3. Admin SSE stream emits booking update event.
 4. Admin queue/detail/timeline refreshes without manual reload.
+
+## 8) Dashboard Fail-Soft Behavior
+
+1. Dashboard requests metrics, bookings, and notifications independently.
+2. If one endpoint fails, available widgets still render.
+3. Failed widget shows inline error state and retry action.
+4. Operators can continue core review actions without full-page failure.
+
+## 9) Availability Error Recovery
+
+1. Agent/tool receives malformed or ambiguous datetime input.
+2. Backend returns deterministic validation error (no unhandled exception path).
+3. Agent replies with short recovery prompt asking for clear date/time.
+4. Booking flow continues after corrected input without state corruption.

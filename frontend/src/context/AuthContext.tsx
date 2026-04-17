@@ -20,6 +20,7 @@ import {
   clearTokens,
   getRefreshToken,
   storeTokens,
+  tryRefreshSession,
 } from '@/lib/api';
 import { openAuthenticatedSseStream, type StreamEnvelope } from '@/lib/realtime';
 import type { SectionKey, SectionMap, User } from '@/types';
@@ -136,14 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        // Refresh tokens first so access token is fresh
-        const refreshed = await api.post<{
-          access_token: string;
-          refresh_token: string;
-          token_type: string;
-        }>('/auth/refresh', { refresh_token: refreshToken }, { skipAuth: true });
+        const refreshed = await tryRefreshSession();
+        if (!refreshed) {
+          clearTokens();
+          setUnauthenticated();
+          return;
+        }
 
-        storeTokens(refreshed);
         const { user, sections } = await fetchMeAndSections();
         setAuthenticated(user, sections);
       } catch {
@@ -231,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (key: SectionKey): boolean => {
       if (!state.isAuthenticated) return false;
       if (isAdmin) return true; // admin always has all sections
+      if (key === 'dashboard') return false;
       return state.sections?.[key] ?? false;
     },
     [state.isAuthenticated, state.sections, isAdmin],

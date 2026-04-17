@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.models.client import Client
 from app.models.conversation_session import ConversationSession
 from app.models.enums import Channel
+from app.models.message import Message
 
 
 @pytest.mark.asyncio
@@ -74,6 +75,7 @@ async def test_cross_channel_continuity_uses_single_client_identity(
 @pytest.mark.asyncio
 async def test_twilio_sms_webhook_parses_form_and_handles_duplicates(
     client: AsyncClient,
+    db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "twilio_validate_signature", False)
@@ -87,16 +89,24 @@ async def test_twilio_sms_webhook_parses_form_and_handles_duplicates(
     first = await client.post("/webhooks/twilio/sms", data=payload)
     assert first.status_code == 200
     assert first.headers["content-type"].startswith("application/xml")
-    assert "<Response>" in first.text
+    assert "<Response" in first.text
 
     second = await client.post("/webhooks/twilio/sms", data=payload)
     assert second.status_code == 200
-    assert "<Message>" in second.text
+    assert "<Response" in second.text
+
+    inbound_count = await db.scalar(
+        select(func.count())
+        .select_from(Message)
+        .where(Message.twilio_message_sid == payload["MessageSid"])
+    )
+    assert inbound_count == 1
 
 
 @pytest.mark.asyncio
 async def test_twilio_sms_with_media_routes_to_whatsapp_prompt(
     client: AsyncClient,
+    db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "twilio_validate_signature", False)
@@ -112,4 +122,12 @@ async def test_twilio_sms_with_media_routes_to_whatsapp_prompt(
     }
     response = await client.post("/webhooks/twilio/sms", data=payload)
     assert response.status_code == 200
-    assert "WhatsApp" in response.text
+    assert response.headers["content-type"].startswith("application/xml")
+    assert "<Response" in response.text
+
+    saved_message_result = await db.execute(
+        select(Message).where(Message.twilio_message_sid == payload["MessageSid"])
+    )
+    saved_message = saved_message_result.scalar_one()
+    assert saved_message.raw_payload is not None
+    assert saved_message.raw_payload.get("MediaUrl0") == payload["MediaUrl0"]

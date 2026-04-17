@@ -90,6 +90,43 @@ export class ApiResponseError extends Error {
   }
 }
 
+function decodeJwtRole(token: string | null): string {
+  if (!token) return 'anonymous';
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return 'unknown';
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    const decoded = atob(padded);
+    const parsed = JSON.parse(decoded) as { role?: string };
+    return parsed.role ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+function shouldLogFailure(path: string, status: number): boolean {
+  // Expected during session bootstrap with stale/rotated refresh tokens.
+  if (path === '/auth/refresh' && status === 401) {
+    return false;
+  }
+  return true;
+}
+
+function logApiFailure(path: string, status: number, detail: string | string[]): void {
+  if (!shouldLogFailure(path, status)) {
+    return;
+  }
+
+  const role = decodeJwtRole(getAccessToken());
+  console.warn('[api] request failed', {
+    endpoint: path,
+    status,
+    role,
+    detail,
+  });
+}
+
 async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, skipAuth = false, _retry = false, ...init } = options;
 
@@ -105,11 +142,20 @@ async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<
     }
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    logApiFailure(path, 0, 'Network error');
+    throw new ApiResponseError(
+      0,
+      `Network error while contacting server (${BASE_URL}).`,
+    );
+  }
 
   // Auto-refresh on 401
   if (res.status === 401 && !_retry && !skipAuth) {
@@ -132,6 +178,7 @@ async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<
     } catch {
       // ignore parse errors
     }
+    logApiFailure(path, res.status, detail);
     throw new ApiResponseError(res.status, detail);
   }
 

@@ -3,9 +3,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import metrics
 from app.core.config import settings
+from app.models.audit_event import AuditEvent
 from app.models.client import Client
 from app.models.conversation_session import ConversationSession
 from app.models.enums import (
@@ -18,8 +21,10 @@ from app.models.enums import (
 from app.models.notification import Notification
 from app.models.worker import Worker
 from app.repositories.idempotency_repo import IdempotencyRepository
+from app.services.agent_runtime import AgentRuntimeService
 from app.services.notification_service import NotificationService
 from app.services.twilio_gateway import OutboundSendResult, TwilioGateway
+from app.tools.tool_runner import ToolRunner
 
 
 @pytest.mark.asyncio
@@ -129,6 +134,70 @@ async def test_metrics_endpoint_exposes_reliability_counters(client: AsyncClient
     assert "pending_reviews" in payload
     assert "failed_tool_calls" in payload
     assert "reminder_failures" in payload
+
+
+@pytest.mark.asyncio
+async def test_tool_failure_telemetry_increments_counter_and_writes_audit(
+    db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = AgentRuntimeService(db)
+    baseline = metrics.snapshot().get("tool_calls_failed_total", 0)
+
+    async def _failing_tool(**kwargs: object) -> dict[str, object]:
+        raise RuntimeError("simulated_tool_failure")
+
+    monkeypatch.setattr(service.tool_runner, "failing_tool", _failing_tool, raising=False)
+
+    client_id = uuid.uuid4()
+    worker_id = uuid.uuid4()
+    result = await service._execute_tool(
+        "failing_tool",
+        {"example": "value"},
+        client_id,
+        worker_id,
+        Channel.SMS,
+    )
+    assert result["ok"] is False
+    assert "simulated_tool_failure" in str(result.get("error"))
+
+    updated = metrics.snapshot().get("tool_calls_failed_total", 0)
+    assert updated == baseline + 1
+
+    audit_result = await db.execute(
+        select(AuditEvent).where(
+            AuditEvent.entity_type == "client",
+            AuditEvent.entity_id == client_id,
+            AuditEvent.event_type == "tool_execution_failed",
+        )
+    )
+    audit = audit_result.scalars().first()
+    assert audit is not None
+    assert audit.metadata_["tool"] == "failing_tool"
+    assert audit.metadata_["arguments"]["example"] == "value"
+    assert "simulated_tool_failure" in str(audit.metadata_["error"])
+
+
+@pytest.mark.asyncio
+async def test_availability_tool_invalid_datetime_returns_deterministic_error(
+    db: AsyncSession,
+) -> None:
+    runner = ToolRunner(db)
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    db.add(worker)
+    await db.flush()
+
+    baseline = metrics.snapshot().get("tool_input_validation_failed_total", 0)
+    result = await runner.check_availability(
+        worker_id=str(worker.id),
+        start_at="tomorrow 8pm",
+        duration_minutes=60,
+    )
+
+    assert result["ok"] is False
+    assert "Invalid datetime format" in str(result.get("error"))
+    updated = metrics.snapshot().get("tool_input_validation_failed_total", 0)
+    assert updated == baseline + 1
 
 
 @pytest.mark.asyncio

@@ -8,59 +8,129 @@ import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { Badge, bookingStatusColor } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
+import { useAuth } from '@/context/AuthContext';
 import type { Metrics, BookingSummary, NotificationItem } from '@/types';
 import type { StreamEnvelope } from '@/lib/realtime';
 import styles from './page.module.css';
 
+interface DashboardErrors {
+  metrics?: string;
+  bookings?: string;
+  notifications?: string;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return 'Request failed';
+}
+
 export default function DashboardPage() {
+  const { isAdmin, isLoading: authLoading } = useAuth();
+  const router = useRouter();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [errors, setErrors] = useState<DashboardErrors>({});
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const [m, b, n] = await Promise.all([
+    const [m, b, n] = await Promise.allSettled([
       metricsApi.get(),
       bookingsApi.list({ limit: 5 }),
       notificationsApi.list(),
     ]);
-    setMetrics(m);
-    setBookings(b);
-    setNotifications(n.slice(0, 5));
+
+    const nextErrors: DashboardErrors = {};
+
+    if (m.status === 'fulfilled') {
+      setMetrics(m.value);
+    } else {
+      nextErrors.metrics = getErrorMessage(m.reason);
+    }
+
+    if (b.status === 'fulfilled') {
+      setBookings(b.value);
+    } else {
+      nextErrors.bookings = getErrorMessage(b.reason);
+    }
+
+    if (n.status === 'fulfilled') {
+      setNotifications(n.value.slice(0, 5));
+    } else {
+      nextErrors.notifications = getErrorMessage(n.reason);
+    }
+
+    setErrors(nextErrors);
   }, []);
 
+  const hasAnyError = Boolean(errors.metrics || errors.bookings || errors.notifications);
+
   useEffect(() => {
+    if (!authLoading && !isAdmin) {
+      router.replace('/worker');
+    }
+  }, [authLoading, isAdmin, router]);
+
+  useEffect(() => {
+    if (authLoading || !isAdmin) {
+      return;
+    }
+
     let cancelled = false;
     const runInitialLoad = async () => {
       try {
-        const [m, b, n] = await Promise.all([
+        const [m, b, n] = await Promise.allSettled([
           metricsApi.get(),
           bookingsApi.list({ limit: 5 }),
           notificationsApi.list(),
         ]);
         if (cancelled) return;
-        setMetrics(m);
-        setBookings(b);
-        setNotifications(n.slice(0, 5));
+
+        const nextErrors: DashboardErrors = {};
+
+        if (m.status === 'fulfilled') {
+          setMetrics(m.value);
+        } else {
+          nextErrors.metrics = getErrorMessage(m.reason);
+        }
+
+        if (b.status === 'fulfilled') {
+          setBookings(b.value);
+        } else {
+          nextErrors.bookings = getErrorMessage(b.reason);
+        }
+
+        if (n.status === 'fulfilled') {
+          setNotifications(n.value.slice(0, 5));
+        } else {
+          nextErrors.notifications = getErrorMessage(n.reason);
+        }
+
+        setErrors(nextErrors);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     runInitialLoad();
     return () => { cancelled = true; };
-  }, []);
+  }, [authLoading, isAdmin]);
 
   useAdminRealtimeRefresh(
     (event: StreamEnvelope) =>
-      event.type.startsWith('booking.')
+      isAdmin
+      && (
+        event.type.startsWith('booking.')
       || event.type.startsWith('notification.')
-      || event.type.startsWith('worker.'),
+      || event.type.startsWith('worker.')
+      ),
     () => {
-      void load();
+      if (isAdmin) {
+        void load();
+      }
     },
   );
 
-  if (loading) {
+  if (authLoading || loading || !isAdmin) {
     return (
       <div className={styles.loadingCenter}>
         <Spinner size="lg" />
@@ -74,6 +144,15 @@ export default function DashboardPage() {
         <h1 className={styles.pageTitle}>Dashboard</h1>
         <p className={styles.pageSub}>Live operational overview</p>
       </header>
+
+      {hasAnyError && (
+        <div className={styles.alertBanner} role="alert">
+          <span>Some dashboard data could not be loaded.</span>
+          <button type="button" className={styles.retryButton} onClick={() => void load()}>
+            Retry all
+          </button>
+        </div>
+      )}
 
       {/* KPI Row */}
       <section className={styles.kpiGrid} aria-label="Key metrics">
@@ -106,6 +185,11 @@ export default function DashboardPage() {
           description="Agent tool errors in last cycle"
         />
       </section>
+      {errors.metrics && (
+        <p className={styles.sectionError}>
+          Metrics load failed: {errors.metrics}
+        </p>
+      )}
 
       {/* Recent activity */}
       <div className={styles.recentGrid}>
@@ -156,6 +240,18 @@ export default function DashboardPage() {
               </table>
             )}
           </div>
+          {errors.bookings && (
+            <div className={styles.widgetErrorRow}>
+              <p className={styles.sectionError}>Bookings load failed: {errors.bookings}</p>
+              <button
+                type="button"
+                className={styles.retryButton}
+                onClick={() => void load()}
+              >
+                Retry
+              </button>
+            </div>
+          )}
         </section>
 
         {/* Recent notifications */}
@@ -190,6 +286,20 @@ export default function DashboardPage() {
               </ul>
             )}
           </div>
+          {errors.notifications && (
+            <div className={styles.widgetErrorRow}>
+              <p className={styles.sectionError}>
+                Notifications load failed: {errors.notifications}
+              </p>
+              <button
+                type="button"
+                className={styles.retryButton}
+                onClick={() => void load()}
+              >
+                Retry
+              </button>
+            </div>
+          )}
         </section>
       </div>
     </div>

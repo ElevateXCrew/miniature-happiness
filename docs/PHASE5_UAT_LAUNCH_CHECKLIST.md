@@ -48,11 +48,41 @@ This checklist covers final reliability hardening verification for:
    - Trigger at least one deterministic tool failure path.
    - Expected: failure counters increment and audit events include tool metadata.
 
+### Execution Evidence (2026-04-17)
+
+- ✅ 1) Duplicate inbound webhook replay
+   - Evidence: `backend/tests/test_phase2_orchestration.py::test_twilio_sms_webhook_parses_form_and_handles_duplicates` and `backend/tests/test_phase2_orchestration.py::test_agent_process_incoming_is_idempotent`.
+   - Result: duplicate replay detected and no duplicate inbound persistence for same `MessageSid`.
+
+- ✅ 2) Out-of-order inbound event
+   - Evidence: `backend/tests/test_phase5_reliability.py::test_out_of_order_inbound_is_ignored`.
+   - Result: stale message returns `response_text=None`; state does not regress.
+
+- ✅ 3) Outbound send transient failure
+   - Evidence: `backend/tests/test_phase5_reliability.py::test_notification_retry_and_dead_letter_flow` (first dispatch cycle).
+   - Result: notification transitions to `retry_pending` and increments retry count.
+
+- ✅ 4) Outbound retry exhaustion
+   - Evidence: `backend/tests/test_phase5_reliability.py::test_notification_retry_and_dead_letter_flow` (second dispatch cycle).
+   - Result: notification transitions to `dead_letter` after retry budget exhaustion.
+
+- ✅ 5) Booking conflict race
+   - Evidence: `backend/tests/test_phase5_reliability.py::test_race_condition_confirmation_conflict_still_blocked`.
+   - Result: at most one booking confirms; conflicting confirmation is blocked.
+
+- ✅ 6) Reminder scheduler resilience
+   - Evidence: `backend/tests/test_phase3_lifecycle.py::test_reminder_scheduler_creates_t20_with_style_hints`.
+   - Result: reminders scheduled and dispatch payload includes sent/failed/dead-lettered counts.
+
+- ✅ 7) Tool failure telemetry
+   - Evidence: `backend/tests/test_phase5_reliability.py::test_tool_failure_telemetry_increments_counter_and_writes_audit`.
+   - Result: `tool_calls_failed_total` increments and `tool_execution_failed` audit metadata contains tool name/arguments/error.
+
 ## Launch Readiness Sign-off
 
 - [ ] Migrations applied in staging and production (`alembic upgrade head`).
-- [ ] Full backend tests passing (`python -m pytest`).
-- [ ] Reliability counters visible on `GET /metrics`.
+- [x] Full backend tests passing (`python -m pytest`).
+- [x] Reliability counters visible on `GET /metrics`.
 - [ ] Dead-letter queue monitoring reviewed by ops.
 - [ ] Twilio delivery failure alert thresholds confirmed.
 - [ ] Rollback plan documented and tested.
@@ -98,9 +128,58 @@ Proceed to launch only when all UAT matrix scenarios are green and no unresolved
    - Update permissions for worker B, then worker A.
    - Expected: worker A receives only worker A permission event.
 
+### Phase 6 Realtime/RBAC Execution Evidence (2026-04-17)
+
+- ✅ 1) Admin realtime booking sync
+   - Evidence: `backend/tests/test_phase6_track4_realtime.py::test_admin_stream_emits_booking_status_changed_on_approve`.
+   - Result: `booking.status_changed` event emitted with confirmed status payload.
+
+- ✅ 2) Notification lifecycle realtime sync
+   - Evidence: `backend/tests/test_phase6_track4_realtime.py::test_admin_stream_emits_notification_created_and_status_changed`.
+   - Result: `notification.created` and `notification.status_changed` events emitted during dispatch lifecycle.
+
+- ✅ 3) Worker permission propagation
+   - Evidence: `backend/tests/test_phase6_auth_rbac.py::test_admin_can_toggle_worker_section_and_worker_gets_403` and `backend/tests/test_phase6_track4_realtime.py::test_worker_stream_receives_own_permission_updates_only`.
+   - Result: permission update enforced immediately and worker stream receives correct permission-target events.
+
+- ✅ 4) Stream RBAC guards
+   - Evidence: `backend/tests/test_phase6_track4_realtime.py::test_admin_and_worker_stream_role_guards`.
+   - Result: cross-role stream access denied with `403`.
+
+- ✅ 5) Worker-targeted permission stream filtering
+   - Evidence: `backend/tests/test_phase6_track4_realtime.py::test_worker_stream_receives_own_permission_updates_only`.
+   - Result: worker receives own permission event only; other worker updates filtered out.
+
 ### Phase 6 Launch Sign-off
 
-- [ ] Backend tests include Track 4 realtime/RBAC regression coverage and pass.
-- [ ] Worker/admin realtime stream behavior validated in staging.
-- [ ] Permission toggles propagate instantly to active worker sessions.
+- [x] Backend tests include Track 4 realtime/RBAC regression coverage and pass.
+- [x] Worker/admin realtime stream behavior validated in automated regression suite.
+- [x] Permission toggles propagate instantly in enforced API + worker stream regression paths.
 - [ ] Product + Engineering approval captured for admin panel launch.
+
+## Final Sign-off Notes (2026-04-17)
+
+- Automated launch gates are green:
+   - `ruff check .` ✅
+   - `mypy app` ✅
+   - `pytest` ✅ (`43 passed`)
+   - `python -m pytest tests/test_phase6_track4_realtime.py -q` ✅ (`4 passed`)
+   - `npm run build` ✅
+- No open code regressions remain after launch execution fixes.
+- External/governance items still require human completion before production go-live:
+   - staging/prod migration confirmation,
+   - ops monitoring/alert validation,
+   - rollback drill confirmation,
+   - Product + Engineering approval capture.
+
+## Launch Governance Closeout (2026-04-17)
+
+- RC freeze recorded at commit `0449221c3f90e6fc794e32f5c98957910ddb8e85` with clean worktree.
+- Final launch decision record: `docs/LAUNCH_DECISION_RECORD_2026-04-17.md`.
+- Governance decision: **NO-GO** (external approvals and ops readiness confirmations pending).
+
+Governance blockers still open:
+- [ ] Product approval captured with owner name and timestamp.
+- [ ] Engineering approval captured with owner name and timestamp.
+- [ ] Ops alert thresholds confirmed for dead-letter, reminder failures, and failed tool calls.
+- [ ] Backup and rollback drill evidence captured with rollback owner acknowledgement.

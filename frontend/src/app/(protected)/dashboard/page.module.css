@@ -21,6 +21,48 @@
 .pageTitle { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; }
 .pageSub   { font-size: 0.875rem; color: var(--text-muted); }
 
+.alertBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border-subtle));
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-surface));
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.retryButton {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.retryButton:hover {
+  border-color: var(--accent-secondary);
+}
+
+.sectionError {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
+.widgetErrorRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+}
+
 /* KPI grid */
 .kpiGrid {
   display: grid;
