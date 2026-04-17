@@ -8,12 +8,14 @@ a structured dict result that the LLM orchestration layer can include in the cha
 The LLM NEVER mutates state directly — it only calls these functions.
 """
 
+import re
 import uuid
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import metrics
 from app.core.config import settings
 from app.models.enums import (
     ActorType,
@@ -38,6 +40,23 @@ def _ok(data: dict[str, Any]) -> dict[str, Any]:
 
 def _err(message: str) -> dict[str, Any]:
     return {"ok": False, "error": message}
+
+
+_STRICT_ISO_MINUTE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})?$")
+
+
+def _parse_iso_datetime(value: str) -> tuple[datetime | None, str | None]:
+    raw = value.strip()
+    if not _STRICT_ISO_MINUTE.match(raw):
+        return None, "Invalid datetime format. Use ISO format like 2026-04-18T20:30."
+
+    normalized = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None, "Invalid datetime format. Use ISO format like 2026-04-18T20:30."
+
+    return parsed, None
 
 
 class ToolRunner:
@@ -143,7 +162,10 @@ class ToolRunner:
         self, worker_id: str, start_at: str, duration_minutes: int
     ) -> dict[str, Any]:
         svc = AvailabilityService(self.db)
-        start_dt = datetime.fromisoformat(start_at)
+        start_dt, parse_error = _parse_iso_datetime(start_at)
+        if parse_error is not None or start_dt is None:
+            metrics.incr("tool_input_validation_failed_total")
+            return _err(parse_error or "Invalid datetime format.")
         result = await svc.check(
             worker_id=uuid.UUID(worker_id),
             proposed_start=start_dt,

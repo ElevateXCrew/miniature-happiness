@@ -231,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (key: SectionKey): boolean => {
       if (!state.isAuthenticated) return false;
       if (isAdmin) return true; // admin always has all sections
+      if (key === 'dashboard') return false;
       return state.sections?.[key] ?? false;
     },
     [state.isAuthenticated, state.sections, isAdmin],

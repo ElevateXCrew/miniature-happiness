@@ -10,6 +10,7 @@ This file is the single execution source of truth for project planning.
 - Phase 6 Track 4 implementation is complete: admin/worker realtime SSE sync, permission refresh propagation, and Track 4 regression/UAT coverage are added.
 - Phase 6 launch hardening release-candidate gate has been executed and is green (backend lint/types/tests, focused realtime regression, frontend build).
 - Twilio webhook regression tests are aligned with current deterministic contract (empty TwiML response + orchestrator-managed outbound sends).
+- Phase 6 stabilization pass is complete: dashboard fail-soft behavior, availability error recovery, role/section consistency checks, and targeted regression coverage were executed.
 
 ## Scope Locks (Agreed)
 
@@ -136,6 +137,7 @@ Status: Complete.
 
 ## Immediate Next Actions
 
-1. Execute Phase 6 realtime/RBAC UAT matrix in staging.
-2. Capture product + engineering launch sign-off for panel release.
-3. Complete launch checklist evidence for stream behavior, permission propagation, and approvals.
+1. Keep the quality gate green on every bug-fix patch (`ruff`, `mypy`, `pytest`, focused realtime regression, frontend `npm run build`).
+2. Prioritize defects by production impact: booking lifecycle correctness > auth/RBAC access leaks > dashboard/realtime UX.
+3. Keep docs synced for each bug-fix release (`AGENTS.md`, `docs/API_ENDPOINTS.md`, `docs/WORKFLOWS.md`, and `AI Booking Assistant_ Features and Flow.md` when behavior changes).
+4. Maintain rollout governance artifacts (approvals, rollback owner, alert thresholds, and release evidence).

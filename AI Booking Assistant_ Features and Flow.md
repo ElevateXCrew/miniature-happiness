@@ -414,3 +414,60 @@ The Admin Dashboard provides:
 -   **State Tracking:** A rigid field in the DB to define exactly where the conversation stands (e.g., `need_location`, `need_receipt`).
     
 -   **Webhook Integration:** For real-time messaging across days or weeks.
+
+---
+
+## 8) Bug-Fix Expectations for AI Coding Agents (Post-Phase 6)
+
+This section defines what future agents should optimize for when fixing bugs in this project.
+
+### A) Current System Reality
+
+-   Backend deterministic orchestration, Twilio channels, lifecycle, reliability hardening, JWT auth/RBAC, admin panel, worker portal, and realtime sync are already implemented.
+-   The project is now in stabilization and launch-governance mode, not feature-discovery mode.
+-   Any bug fix must preserve the backend state machine as source of truth.
+
+### B) Priority Order for Bug Fixes
+
+1.  **Booking correctness and safety** (state transitions, slot conflicts, review/decision flow)
+2.  **Authorization correctness** (role checks + section `403` enforcement)
+3.  **Message reliability** (dedup, out-of-order handling, retry/dead-letter, reminders)
+4.  **Admin/worker UX resilience** (dashboard fail-soft behavior, realtime refresh stability)
+
+### C) Non-Negotiable Behavior During Fixes
+
+-   Do not bypass backend guards with prompt-only or frontend-only logic.
+-   Keep Alysha persona and short 1-2 line response style intact.
+-   Keep strict field order intact: `datetime -> age(18+) -> ethnicity -> duration -> name(optional)`.
+-   Preserve cross-channel identity by `clients.phone_e164`.
+-   Maintain worker section toggle behavior: hidden in UI and blocked in backend API when disabled.
+
+### D) Known High-Risk Bug Classes
+
+-   Dashboard/API partial failure should not blank the whole admin screen.
+-   Availability checks must fail gracefully on malformed datetime inputs.
+-   Realtime permission updates must propagate without requiring re-login.
+-   Any direct call to disabled worker sections must return `403`.
+
+### E) Required Verification After Every Bug Fix
+
+-   Backend:
+    - `ruff check .`
+    - `mypy app`
+    - `pytest`
+    - `python -m pytest tests/test_phase6_track4_realtime.py -q`
+-   Frontend:
+    - `npm run build`
+-   Runtime smoke:
+    - admin dashboard loads with metrics/recent activity
+    - worker section toggle immediately changes visibility/access
+    - booking availability and confirmation flow remains deterministic
+
+### F) Documentation Update Rule
+
+-   If runtime behavior changes, update all relevant docs in the same patch:
+    - `AGENTS.md`
+    - `IMPLEMENTAION_PLAN.md`
+    - `docs/API_ENDPOINTS.md`
+    - `docs/WORKFLOWS.md`
+    - this file (`AI Booking Assistant_ Features and Flow.md`)
