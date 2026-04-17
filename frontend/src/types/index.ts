@@ -82,6 +82,7 @@ export interface BookingDetail extends BookingSummary {
   confirmed_at: string | null;
   cancelled_at: string | null;
   completed_at: string | null;
+  incall_address_sent_at: string | null;
   media_count: number;
   has_receipt: boolean;
 }
@@ -97,6 +98,38 @@ export interface TimelineItem {
   timestamp: string;
   id: string;
   [key: string]: unknown;
+}
+
+export interface TimelineResponse {
+  booking_id: string;
+  timeline: TimelineItem[];
+}
+
+// ----------------------------------------------------------
+// Media
+// ----------------------------------------------------------
+
+export interface MediaItem {
+  id: string;
+  booking_id: string;
+  channel: string;
+  media_type: string;
+  source_url: string | null;
+  is_receipt: boolean;
+  created_at: string;
+}
+
+// ----------------------------------------------------------
+// Sessions
+// ----------------------------------------------------------
+
+export interface ActiveSession {
+  id: string;
+  client_id: string;
+  worker_id: string;
+  state: string;
+  last_channel: string | null;
+  active_booking_id: string | null;
 }
 
 // ----------------------------------------------------------
@@ -142,10 +175,21 @@ export interface WorkerUser {
   worker_id: string | null;
 }
 
+export interface WorkerSectionPermissions {
+  user_id: string;
+  sections: SectionMap;
+}
+
 // ----------------------------------------------------------
 // API
 // ----------------------------------------------------------
 
 export interface ApiError {
   detail: string | string[];
+}
+
+export interface PaginationParams {
+  offset?: number;
+  limit?: number;
+  status?: BookingStatus;
 }
