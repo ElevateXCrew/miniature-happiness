@@ -4,7 +4,7 @@
 
 - **Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 Complete:** deterministic backend, Twilio SMS/WhatsApp orchestration, admin lifecycle APIs, worker sync flows, client decision messaging, media enrichment, branch constraints, reminder hardening, and reliability controls are implemented.
 - Conversation flow supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
-- Current backend test status: **40 passing tests**.
+- Current backend test status: **43 passing tests**.
 - Phase 5 reliability hardening is implemented (dedup/out-of-order handling, retry/dead-letter, metrics, resilience tests).
 - **Phase 6 Track 0 complete:** backend JWT auth + RBAC schema/APIs and backend authorization guards are implemented.
 - **Phase 6 Track 1 complete:** Next.js 14 frontend shell, auth flow, role-aware sidebar, and route guards are implemented at `frontend/`.
@@ -12,9 +12,10 @@
 - **Phase 6 Track 3 complete:** Worker portal implemented — upcoming bookings with approve/reject/complete-early, Free Now availability command, Send Message to active chat, permission-gated views per admin section toggles.
 - **Phase 6 Track 4 complete:** Realtime SSE sync integrated for admin and worker sessions, permission refresh propagation implemented, and Track 4 RBAC realtime regression + UAT checklist updates landed.
 - **Phase 6 launch hardening update (2026-04-17):** release-candidate quality gate executed and green (`ruff`, `mypy`, full backend `pytest`, focused Track 4 realtime regression, frontend `npm run build`).
+- **Launch execution update (2026-04-17):** full UAT checklist run completed with automated evidence captured for Phase 5 reliability and Phase 6 auth/RBAC/realtime scenarios.
 - Twilio webhook contract verified in tests: webhook returns empty TwiML response while outbound delivery is handled by orchestrator-side send flow.
 - Frontend build warning hardening applied by setting `turbopack.root` in `frontend/next.config.ts`.
-- **Current active workstream:** staged UAT execution and launch sign-off capture.
+- **Current active workstream:** external launch governance closeout (ops checks + Product/Engineering approval capture).
 
 ## Source-of-Truth Files (Read First)
 
@@ -113,6 +114,7 @@
 - ✅ New migration (`002_phase5_reliability`) adds retry/dead-letter status support and retry metadata fields
 - ✅ Reliability and race-condition test coverage added (`backend/tests/test_phase5_reliability.py`)
 - ✅ UAT + launch checklist artifact added (`docs/PHASE5_UAT_LAUNCH_CHECKLIST.md`)
+- ✅ Tool failure telemetry regression coverage expanded to assert failed-tool counter increments and audit metadata capture.
 
 **Phase 6 Track 0 Summary (Completed):**
 - ✅ Added auth/RBAC data model with `users` and `worker_section_permissions`.
@@ -188,8 +190,10 @@
 - ✅ Permission updates now propagate to active worker sessions, triggering immediate `/ui/sections` refresh without re-login.
 - ✅ Notification lifecycle events (`notification.created`, `notification.status_changed`) now publish to realtime stream for queue/KPI freshness.
 - ✅ Track 4 regression tests added (`backend/tests/test_phase6_track4_realtime.py`) covering stream RBAC guards and worker event-target filtering logic.
+- ✅ Track 4 regression coverage expanded to include admin booking status stream and notification lifecycle stream events.
 - ✅ Track 4 UAT + launch checklist addendum added to `docs/PHASE5_UAT_LAUNCH_CHECKLIST.md`.
 - ✅ Release-candidate gate re-run completed during launch hardening: backend and frontend quality checks are green.
+- ✅ Launch execution evidence captured in checklist for all staged UAT matrix items.
 
 ## Implementation Order (Do Not Skip)
 
@@ -340,8 +344,8 @@ cd backend && python -m app.scripts.seed_users
 Current verification snapshot:
 - `ruff check .` ✅
 - `mypy app` ✅
-- `pytest` ✅ (40 passed)
-- `python -m pytest tests/test_phase6_track4_realtime.py -q` ✅
+- `pytest` ✅ (43 passed)
+- `python -m pytest tests/test_phase6_track4_realtime.py -q` ✅ (4 passed)
 
 ### Frontend (run from `frontend/`)
 1. `npm run build` — verify TypeScript + compilation
