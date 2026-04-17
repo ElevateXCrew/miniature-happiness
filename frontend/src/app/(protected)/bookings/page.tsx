@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ClipboardList } from 'lucide-react';
 import { bookingsApi } from '@/lib/adminApi';
 import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { Badge, bookingStatusColor } from '@/components/ui/Badge';
@@ -107,7 +108,7 @@ export default function BookingsPage() {
         {loading ? (
           <div className={styles.loadingRow}><Spinner /></div>
         ) : bookings.length === 0 ? (
-          <EmptyState icon="📋" title="No bookings found" description="Try changing your filter." />
+          <EmptyState icon={<ClipboardList size={40} />} title="No bookings found" description="Try changing your filter." />
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -149,7 +150,7 @@ export default function BookingsPage() {
                             loading={actionLoading === b.id + 'approve'}
                             onClick={() => doAction(b.id, 'approve')}
                           >
-                            ✓
+                            Approve
                           </Button>
                           <Button
                             id={`reject-${b.id}`}
@@ -158,7 +159,7 @@ export default function BookingsPage() {
                             loading={actionLoading === b.id + 'reject'}
                             onClick={() => doAction(b.id, 'reject')}
                           >
-                            ✗
+                            Reject
                           </Button>
                           <Button
                             id={`cancel-${b.id}`}
@@ -167,7 +168,7 @@ export default function BookingsPage() {
                             loading={actionLoading === b.id + 'cancel'}
                             onClick={() => doAction(b.id, 'cancel')}
                           >
-                            –
+                            Cancel
                           </Button>
                         </div>
                       )}

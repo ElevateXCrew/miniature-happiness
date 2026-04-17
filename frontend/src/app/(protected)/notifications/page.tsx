@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { Bell } from 'lucide-react';
 import { notificationsApi } from '@/lib/adminApi';
 import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { Badge } from '@/components/ui/Badge';
@@ -91,7 +92,7 @@ export default function NotificationsPage() {
         {loading ? (
           <div className={styles.loadingRow}><Spinner /></div>
         ) : notifications.length === 0 ? (
-          <EmptyState icon="🔔" title="Queue is empty" description="No due notifications at this time." />
+          <EmptyState icon={<Bell size={40} />} title="Queue is empty" description="No due notifications at this time." />
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>

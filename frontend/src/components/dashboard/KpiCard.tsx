@@ -1,9 +1,10 @@
+import React from 'react';
 import styles from './KpiCard.module.css';
 
 interface Props {
   label: string;
   value: number | string;
-  icon: string;
+  icon: React.ReactNode;
   accent?: 'default' | 'warning' | 'danger' | 'success';
   description?: string;
 }

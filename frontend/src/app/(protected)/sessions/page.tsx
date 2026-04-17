@@ -1,6 +1,8 @@
 'use client';
 
+import React from 'react';
 import { useCallback, useEffect, useState } from 'react';
+import { Play, Pause, MessageCircle } from 'lucide-react';
 import { sessionsApi } from '@/lib/adminApi';
 import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { Badge } from '@/components/ui/Badge';
@@ -73,12 +75,12 @@ export default function SessionsPage() {
           {agentPaused ? (
             <Button id="resume-btn" variant="primary" size="sm"
               loading={actionLoading === 'resume'} onClick={resume}>
-              ▶ Resume Agent
+              <Play size={14} /> Resume Agent
             </Button>
           ) : (
             <Button id="pause-btn" variant="danger" size="sm"
               loading={actionLoading === 'pause'} onClick={pause}>
-              ⏸ Pause Agent
+              <Pause size={14} /> Pause Agent
             </Button>
           )}
           <Button id="refresh-sessions-btn" variant="secondary" size="sm" onClick={load}>
@@ -89,7 +91,7 @@ export default function SessionsPage() {
 
       {agentPaused && (
         <div className={styles.pauseBanner} role="status">
-          ⏸ Agent is paused — no new messages will be sent until resumed.
+          <Pause size={14} /> Agent is paused — no new messages will be sent until resumed.
         </div>
       )}
 
@@ -98,7 +100,7 @@ export default function SessionsPage() {
           <div className={styles.loadingRow}><Spinner /></div>
         ) : sessions.length === 0 ? (
           <EmptyState
-            icon="💬"
+            icon={<MessageCircle size={40} />}
             title="No active sessions"
             description="All conversations are currently idle."
           />

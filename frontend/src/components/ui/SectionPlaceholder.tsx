@@ -1,9 +1,10 @@
+import React from 'react';
 import styles from './SectionPlaceholder.module.css';
 
 interface Props {
   title: string;
   description: string;
-  icon: string;
+  icon: React.ReactNode;
   comingIn?: string;
 }
 
