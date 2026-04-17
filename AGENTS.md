@@ -4,7 +4,7 @@
 
 - **Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 Complete:** deterministic backend, Twilio SMS/WhatsApp orchestration, admin lifecycle APIs, worker sync flows, client decision messaging, media enrichment, branch constraints, reminder hardening, and reliability controls are implemented.
 - Conversation flow supports cross-channel continuity by `clients.phone_e164` and persists inbound/outbound message history with tool traces.
-- Current backend test status: **38 passing tests**.
+- Current backend test status: **40 passing tests**.
 - Phase 5 reliability hardening is implemented (dedup/out-of-order handling, retry/dead-letter, metrics, resilience tests).
 - **Phase 6 Track 0 complete:** backend JWT auth + RBAC schema/APIs and backend authorization guards are implemented.
 - **Phase 6 Track 1 complete:** Next.js 14 frontend shell, auth flow, role-aware sidebar, and route guards are implemented at `frontend/`.
@@ -184,7 +184,7 @@
 - ✅ Worker realtime stream endpoint added (`GET /events/worker/stream`) with worker-only RBAC and worker-target filtering.
 - ✅ Permission updates now propagate to active worker sessions, triggering immediate `/ui/sections` refresh without re-login.
 - ✅ Notification lifecycle events (`notification.created`, `notification.status_changed`) now publish to realtime stream for queue/KPI freshness.
-- ✅ Track 4 regression tests added (`backend/tests/test_phase6_track4_realtime.py`) covering stream RBAC guards and worker-targeted permission delivery.
+- ✅ Track 4 regression tests added (`backend/tests/test_phase6_track4_realtime.py`) covering stream RBAC guards and worker event-target filtering logic.
 - ✅ Track 4 UAT + launch checklist addendum added to `docs/PHASE5_UAT_LAUNCH_CHECKLIST.md`.
 
 ## Implementation Order (Do Not Skip)
@@ -331,6 +331,7 @@ cd backend && python -m app.scripts.seed_users
 1. `ruff check .`
 2. `mypy app`
 3. `pytest`
+4. `python -m pytest tests/test_phase6_track4_realtime.py -q` (focused Track 4 realtime regression)
 
 ### Frontend (run from `frontend/`)
 1. `npm run build` — verify TypeScript + compilation
