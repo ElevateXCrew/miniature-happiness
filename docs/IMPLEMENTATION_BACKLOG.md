@@ -1,49 +1,36 @@
-# Implementation Backlog (Post-Phase 6 Launch Hardening)
+# Implementation Backlog (Post-Stabilization)
 
-This backlog is the execution queue after Phase 6 feature delivery.
-Use it for launch readiness, regression safety, and handoff continuity.
+This backlog is now bug-fix and operations focused. Major feature tracks are complete.
 
-## Status Snapshot
+## Current Baseline (Complete)
 
-- Phase 6 Tracks 0-4 are implemented and integrated.
-- Admin/worker realtime sync and RBAC propagation are implemented.
-- Release-candidate quality gate is complete and green across backend/frontend checks.
-- Remaining work is focused on UAT execution, release sign-off, and operational hardening.
+- [x] Phase 1-5 deterministic backend delivery.
+- [x] Phase 6 Tracks 0-4 (auth/RBAC, admin panel, worker portal, realtime sync).
+- [x] Phase 6 stabilization pass (dashboard fail-soft, availability recovery, role/section consistency).
+- [x] Release-candidate quality gate and UAT execution evidence captured.
 
-## Completed Delivery Baseline (Do Not Re-open Without Product Direction)
+## Priority 1: Ongoing Defect Triage and Regression Safety
 
-- [x] Backend auth/RBAC foundation (users, section permissions, JWT auth APIs).
-- [x] Backend role + section authorization guards with `403` enforcement.
-- [x] Next.js auth shell with role-aware sidebar and route guards.
-- [x] Admin panel core screens (dashboard, bookings, timeline, sessions, notifications, settings).
-- [x] Worker portal and permission-gated operational actions.
-- [x] Realtime SSE sync for admin/worker, including permission refresh propagation.
-- [x] Track 4 regression coverage and UAT checklist addendum.
+- [ ] Keep weekly regression run green:
+  - backend: `ruff check .`, `mypy app`, `pytest`
+  - focused realtime: `python -m pytest tests/test_phase6_track4_realtime.py -q`
+  - frontend: `npm run build`
+- [ ] For each user-reported bug, add or update at least one regression test before closing.
+- [ ] Track recurring failure patterns (tool failures, retry/dead-letter growth, dashboard load errors).
 
-## 1) Release Candidate Quality Gate (High Priority)
+## Priority 2: Launch Governance and Operations
 
-- [x] Run backend gate in `backend/`: `ruff check .`, `mypy app`, `pytest`.
-- [x] Run focused realtime regression: `python -m pytest tests/test_phase6_track4_realtime.py -q`.
-- [x] Run frontend gate in `frontend/`: `npm run build` (must pass with 0 TypeScript errors).
+- [ ] Keep launch decision record current with approvals and rollback owner.
+- [ ] Keep alert thresholds tuned for `GET /metrics` counters.
+- [ ] Run production-like smoke checks after every hotfix deployment.
 
-## 2) Phase 6 UAT Execution (High Priority)
+## Priority 3: Documentation Hygiene
 
-- [ ] Execute Phase 6 Track 4 realtime/RBAC UAT matrix in staging.
-- [ ] Validate worker permission propagation during active sessions (no re-login).
-- [ ] Validate stream RBAC guards and worker-target filtering behavior.
+- [ ] Keep `AGENTS.md` current with exact test counts and active workstream.
+- [ ] Keep `docs/API_ENDPOINTS.md` and `docs/WORKFLOWS.md` in sync with behavior changes.
+- [ ] Keep `AI Booking Assistant_ Features and Flow.md` aligned with real behavior expectations for bug-fixing agents.
 
-## 3) Release Governance and Documentation (Medium Priority)
+## Priority 4: Deferred Scope (Do Not Start Without Product Direction)
 
-- [ ] Capture Product + Engineering sign-off for launch.
-- [ ] Keep `docs/API_ENDPOINTS.md` and `docs/WORKFLOWS.md` in sync with any release-critical behavior changes.
-- [ ] Keep `AGENTS.md` and `IMPLEMENTAION_PLAN.md` aligned when status changes.
-
-## 4) Post-Launch Monitoring Readiness (Medium Priority)
-
-- [ ] Review retry/dead-letter behavior and notification queue health during staging soak.
-- [ ] Confirm dashboards/alerts around `GET /metrics` counters are actionable for ops.
-
-## 5) Future Scope Parking Lot (Low Priority)
-
-- [ ] Define mobile worker app scope beyond current worker web portal.
-- [ ] Evaluate additional realtime UX resilience (offline recovery, backpressure handling, stream diagnostics).
+- [ ] Mobile worker app implementation (beyond current worker web portal).
+- [ ] Advanced realtime resilience features (offline replay UX, stream diagnostics tooling).

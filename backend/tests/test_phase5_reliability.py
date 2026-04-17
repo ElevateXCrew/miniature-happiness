@@ -24,6 +24,7 @@ from app.repositories.idempotency_repo import IdempotencyRepository
 from app.services.agent_runtime import AgentRuntimeService
 from app.services.notification_service import NotificationService
 from app.services.twilio_gateway import OutboundSendResult, TwilioGateway
+from app.tools.tool_runner import ToolRunner
 
 
 @pytest.mark.asyncio
@@ -175,6 +176,28 @@ async def test_tool_failure_telemetry_increments_counter_and_writes_audit(
     assert audit.metadata_["tool"] == "failing_tool"
     assert audit.metadata_["arguments"]["example"] == "value"
     assert "simulated_tool_failure" in str(audit.metadata_["error"])
+
+
+@pytest.mark.asyncio
+async def test_availability_tool_invalid_datetime_returns_deterministic_error(
+    db: AsyncSession,
+) -> None:
+    runner = ToolRunner(db)
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    db.add(worker)
+    await db.flush()
+
+    baseline = metrics.snapshot().get("tool_input_validation_failed_total", 0)
+    result = await runner.check_availability(
+        worker_id=str(worker.id),
+        start_at="tomorrow 8pm",
+        duration_minutes=60,
+    )
+
+    assert result["ok"] is False
+    assert "Invalid datetime format" in str(result.get("error"))
+    updated = metrics.snapshot().get("tool_input_validation_failed_total", 0)
+    assert updated == baseline + 1
 
 
 @pytest.mark.asyncio

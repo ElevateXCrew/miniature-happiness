@@ -154,6 +154,18 @@ class AgentRuntimeService:
                         args = {}
                     result = await self._execute_tool(name, args, client_id, worker_id, channel)
                     tool_traces.append({"name": name, "arguments": args, "result": result})
+
+                    if (
+                        name == "check_availability"
+                        and not result.get("ok", False)
+                        and isinstance(result.get("error"), str)
+                        and str(result.get("error", "")).startswith("Invalid datetime format")
+                    ):
+                        return AgentReply(
+                            text="Send the date and time like 2026-04-18T20:30, babe.",
+                            tool_traces=tool_traces,
+                        )
+
                     chat_messages.append(
                         {
                             "role": "tool",
