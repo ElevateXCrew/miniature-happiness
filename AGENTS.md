@@ -9,7 +9,8 @@
 - **Phase 6 Track 0 complete:** backend JWT auth + RBAC schema/APIs and backend authorization guards are implemented.
 - **Phase 6 Track 1 complete:** Next.js 14 frontend shell, auth flow, role-aware sidebar, and route guards are implemented at `frontend/`.
 - **Phase 6 Track 2 complete:** Admin core screens implemented — dashboard (KPIs + recent activity), booking queue (filterable + paginated + inline actions), booking detail + timeline, media gallery + receipt marking, active sessions + pause/resume, notification center, and worker section access settings.
-- **Current active workstream: Phase 6 Track 3** (Worker portal — upcoming bookings, worker actions, permission-gated views).
+- **Phase 6 Track 3 complete:** Worker portal implemented — upcoming bookings with approve/reject/complete-early, Free Now availability command, Send Message to active chat, permission-gated views per admin section toggles.
+- **Current active workstream: Phase 6 Track 4** (Realtime SSE sync + RBAC regression/UAT and launch checks).
 
 ## Source-of-Truth Files (Read First)
 
@@ -162,6 +163,21 @@
 - `frontend/src/components/dashboard/` — KpiCard component
 - `frontend/src/lib/adminApi.ts` — typed API helpers
 
+**Phase 6 Track 3 Summary (Completed):**
+- ✅ Worker portal page (`/worker`): upcoming bookings list with booking time, relative countdown, type/duration/name chips, approve/reject/complete-early action buttons, and link to admin booking detail.
+- ✅ Worker Quick Commands sidebar: “Free Now” availability signal (gated on `schedule` section) and Send Message command (gated on `live_chat` section).
+- ✅ Schedule page (`/schedule`): dedicated availability management with Free Now card, section-gated for workers.
+- ✅ All worker actions call `/worker/` endpoints; worker_id is always sourced from `user.worker_id` in `AuthContext`.
+- ✅ Section guards: components show “disabled” state instead of actions when admin has revoked access; no backend bypass possible.
+- ✅ `src/lib/adminApi.ts` extended with `workerPortalApi` — upcomingBookings, approve, reject, completeEarly, freeNow, sendMessage.
+- ✅ `src/types/index.ts` extended with `WorkerUpcomingBooking` and `WorkerCommandResult`.
+- ✅ Build verified: `npm run build` passes with 0 TypeScript errors, 13 routes.
+
+**Relevant Track 3 Frontend Files:**
+- `frontend/src/app/(protected)/worker/page.tsx` — worker home portal
+- `frontend/src/app/(protected)/schedule/page.tsx` — availability management
+- `frontend/src/lib/adminApi.ts` — `workerPortalApi` added
+
 ## Implementation Order (Do Not Skip)
 
 - Start with Phase 1 from `IMPLEMENTAION_PLAN.md` before channel/LLM/admin work.
@@ -172,8 +188,8 @@
   2. ✅ Backend authorization guards (`403` on disabled sections).
   3. ✅ Next.js auth shell and role-aware route/menu guards (Track 1).
   4. ✅ Admin core screens — dashboard, bookings, sessions, notifications, settings (Track 2).
-  5. 🔄 Worker portal — upcoming bookings, worker actions, permission-gated views (Track 3 — active).
-  6. ⬜ Realtime SSE sync + RBAC regression/UAT and launch checks (Track 4).
+  5. ✅ Worker portal — upcoming bookings, worker actions, permission-gated views (Track 3).
+  6. 🔄 Realtime SSE sync + RBAC regression/UAT and launch checks (Track 4 — active).
 
 ## AI Agent Roles for Phase 3+
 

@@ -15,7 +15,9 @@ import type {
   SectionKey,
   SectionMap,
   TimelineResponse,
+  WorkerCommandResult,
   WorkerSectionPermissions,
+  WorkerUpcomingBooking,
   WorkerUser,
 } from '@/types';
 
@@ -120,3 +122,40 @@ export const workersApi = {
       sections,
     }),
 };
+
+// ----------------------------------------------------------
+// Worker Portal  (worker_id is always the caller's own id)
+// ----------------------------------------------------------
+
+export const workerPortalApi = {
+  upcomingBookings: (workerId: string) =>
+    api.get<WorkerUpcomingBooking[]>(`/worker/bookings/upcoming?worker_id=${workerId}`),
+
+  approve: (bookingId: string, workerId: string) =>
+    api.post<{ booking_id: string; status: string }>(
+      `/worker/bookings/${bookingId}/approve?worker_id=${workerId}`,
+    ),
+
+  reject: (bookingId: string, workerId: string) =>
+    api.post<{ booking_id: string; status: string }>(
+      `/worker/bookings/${bookingId}/reject?worker_id=${workerId}`,
+    ),
+
+  completeEarly: (bookingId: string, workerId: string) =>
+    api.post<{ booking_id: string; status: string }>(
+      `/worker/bookings/${bookingId}/complete-early?worker_id=${workerId}`,
+    ),
+
+  freeNow: (workerId: string) =>
+    api.post<WorkerCommandResult>('/worker/availability/free-now', {
+      worker_id: workerId,
+      message_text: 'free now',
+    }),
+
+  sendMessage: (workerId: string, messageText: string) =>
+    api.post<WorkerCommandResult>('/worker/messages', {
+      worker_id: workerId,
+      message_text: messageText,
+    }),
+};
+

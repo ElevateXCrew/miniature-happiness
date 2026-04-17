@@ -180,6 +180,20 @@ export interface WorkerSectionPermissions {
   sections: SectionMap;
 }
 
+export interface WorkerUpcomingBooking {
+  id: string;
+  status: BookingStatus;
+  scheduled_start_at: string | null;
+  duration_minutes: number | null;
+  booking_type: BookingType | null;
+  client_name: string | null;
+}
+
+export interface WorkerCommandResult {
+  success: boolean;
+  message: string;
+}
+
 // ----------------------------------------------------------
 // API
 // ----------------------------------------------------------
@@ -193,3 +207,4 @@ export interface PaginationParams {
   limit?: number;
   status?: BookingStatus;
 }
+
