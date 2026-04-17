@@ -1,0 +1,113 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast),
+    transform var(--transition-fast), opacity var(--transition-fast);
+  position: relative;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Sizes */
+.sm {
+  font-size: 0.8125rem;
+  padding: 6px 14px;
+  height: 32px;
+}
+
+.md {
+  font-size: 0.875rem;
+  padding: 8px 18px;
+  height: 40px;
+}
+
+.lg {
+  font-size: 1rem;
+  padding: 12px 24px;
+  height: 48px;
+}
+
+/* Variants */
+.primary {
+  background: var(--accent-primary);
+  color: #fff;
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+
+.secondary {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--bg-overlay);
+  border-color: var(--border-strong);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--accent-primary-muted);
+  color: var(--accent-secondary);
+}
+
+.danger {
+  background: var(--color-danger-muted);
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* Full width */
+.fullWidth {
+  width: 100%;
+}
+
+/* Spinner inside button */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  position: absolute;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading {
+  cursor: wait;
+}
+
+.textHidden {
+  visibility: hidden;
+}

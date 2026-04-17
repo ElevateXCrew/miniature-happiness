@@ -1,0 +1,15 @@
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.pad-sm  { padding: var(--space-4); }
+.pad-md  { padding: var(--space-6); }
+.pad-lg  { padding: var(--space-8); }
+
+.glow {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 24px var(--accent-glow);
+}
