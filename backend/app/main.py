@@ -133,6 +133,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(events.router)
     app.include_router(twilio.router)
+    app.include_router(twilio.root_router)
     app.include_router(agent.router)
 
     return app
