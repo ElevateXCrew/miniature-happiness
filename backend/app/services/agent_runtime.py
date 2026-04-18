@@ -174,6 +174,7 @@ class AgentRuntimeService:
                     }
                 )
 
+                field_saved_this_turn = False
                 for tc in msg.tool_calls:
                     name = tc.function.name
                     try:
@@ -201,6 +202,21 @@ class AgentRuntimeService:
                             "content": json.dumps(result),
                         }
                     )
+
+                    if name == "update_booking_field" and result.get("ok"):
+                        field_saved_this_turn = True
+
+                # After saving a field, inject a system directive so the LLM
+                # continues the collection flow instead of just saying "Thank you".
+                if field_saved_this_turn:
+                    next_step = result.get("next_step", "")
+                    directive = (
+                        "[SYSTEM — internal only, never quote this to the client] "
+                        f"Field saved successfully. {next_step} "
+                        "Stay in character as Alysha. Keep your reply to 1–2 lines. "
+                        "Do NOT say 'thank you' or acknowledge the save — just move on naturally."
+                    )
+                    chat_messages.append({"role": "system", "content": directive})
                 continue
 
             content = (msg.content or "").strip()

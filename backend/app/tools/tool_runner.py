@@ -149,7 +149,32 @@ class ToolRunner:
         )
         if errors:
             return _err("; ".join(errors))
-        return _ok({"booking_id": booking_id, "field_updated": field_name})
+        # Tell the LLM what comes next so it continues the collection flow
+        # rather than stopping with an acknowledgement like "Thank you".
+        next_field = svc.get_next_required_field(booking) if booking else None
+        _FIELD_QUESTION: dict[str, str] = {
+            "scheduled_start_at": "Ask for booking type (incall or outcall).",
+            "client_age": "Ask for the client's ethnicity.",
+            "client_ethnicity": "Ask for the duration.",
+            "duration_minutes": "Ask for the client's name (optional, they can skip).",
+            "client_name": "Ask for the client's age.",
+        }
+        if next_field is None:
+            next_instruction = (
+                "All required fields are now collected. "
+                "Present a full booking summary and ask the client to confirm."
+            )
+        else:
+            next_instruction = _FIELD_QUESTION.get(
+                next_field,
+                f"Ask for the next required field: {next_field}.",
+            )
+        return _ok({
+            "booking_id": booking_id,
+            "field_updated": field_name,
+            "next_required_field": next_field,
+            "next_step": next_instruction,
+        })
 
     async def validate_booking_fields(self, booking_id: str) -> dict[str, Any]:
         from app.repositories.booking_repo import BookingRepository
