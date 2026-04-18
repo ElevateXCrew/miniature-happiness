@@ -204,6 +204,9 @@ class AgentRuntimeService:
             patch_args.setdefault("client_id", str(client_id))
             patch_args.setdefault("worker_id", str(worker_id))
             patch_args.setdefault("channel", channel.value)
+        if name == "check_availability":
+            # Never rely on the model to provide worker identity.
+            patch_args.setdefault("worker_id", str(worker_id))
 
         try:
             result = await method(**patch_args)

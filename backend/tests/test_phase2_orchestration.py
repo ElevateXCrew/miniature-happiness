@@ -10,6 +10,7 @@ from app.models.client import Client
 from app.models.conversation_session import ConversationSession
 from app.models.enums import Channel
 from app.models.message import Message
+from app.services.agent_runtime import AgentRuntimeService
 
 
 @pytest.mark.asyncio
@@ -131,3 +132,23 @@ async def test_twilio_sms_with_media_routes_to_whatsapp_prompt(
     saved_message = saved_message_result.scalar_one()
     assert saved_message.raw_payload is not None
     assert saved_message.raw_payload.get("MediaUrl0") == payload["MediaUrl0"]
+
+
+@pytest.mark.asyncio
+async def test_check_availability_tool_call_patches_missing_worker_id(
+    db: AsyncSession,
+) -> None:
+    runtime = AgentRuntimeService(db)
+    result = await runtime._execute_tool(
+        "check_availability",
+        {
+            "start_at": "2099-01-01T20:00",
+            "duration_minutes": 60,
+        },
+        client_id=uuid.uuid4(),
+        worker_id=uuid.uuid4(),
+        channel=Channel.WHATSAPP,
+    )
+
+    assert result["ok"] is True
+    assert "available" in result

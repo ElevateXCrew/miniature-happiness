@@ -10,7 +10,7 @@ The LLM NEVER mutates state directly — it only calls these functions.
 
 import re
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,6 +66,9 @@ def _parse_iso_datetime(value: str) -> tuple[datetime | None, str | None]:
         parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return None, "Invalid datetime format. Use ISO format like 2026-04-18T20:30."
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
 
     return parsed, None
 
