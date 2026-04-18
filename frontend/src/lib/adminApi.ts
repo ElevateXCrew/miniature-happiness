@@ -14,6 +14,7 @@ import type {
   NotificationItem,
   SectionKey,
   SectionMap,
+  SessionMessage,
   TimelineResponse,
   WorkerCommandResult,
   WorkerSectionPermissions,
@@ -89,6 +90,9 @@ export const mediaApi = {
 
 export const sessionsApi = {
   listActive: () => api.get<ActiveSession[]>('/admin/sessions/active'),
+
+  getMessages: (sessionId: string) =>
+    api.get<SessionMessage[]>(`/admin/sessions/${sessionId}/messages`),
 
   pause: () => api.post<{ paused: boolean }>('/admin/agent/pause'),
 

@@ -42,15 +42,26 @@ def _err(message: str) -> dict[str, Any]:
     return {"ok": False, "error": message}
 
 
-_STRICT_ISO_MINUTE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})?$")
+_STRICT_ISO_MINUTE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})?$"
+)
+_DATE_ONLY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _parse_iso_datetime(value: str) -> tuple[datetime | None, str | None]:
     raw = value.strip()
-    if not _STRICT_ISO_MINUTE.match(raw):
+
+    # Date-only: ask the LLM/user for a time component
+    if _DATE_ONLY.match(raw):
+        return None, "Please specify a time as well. Use format like 2026-04-18T20:30."
+
+    # Accept both 'T' and space separator between date and time
+    normalized_raw = raw.replace(" ", "T", 1) if " " in raw and "T" not in raw else raw
+
+    if not _STRICT_ISO_MINUTE.match(normalized_raw):
         return None, "Invalid datetime format. Use ISO format like 2026-04-18T20:30."
 
-    normalized = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    normalized = normalized_raw[:-1] + "+00:00" if normalized_raw.endswith("Z") else normalized_raw
     try:
         parsed = datetime.fromisoformat(normalized)
     except ValueError:

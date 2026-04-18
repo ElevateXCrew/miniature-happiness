@@ -15,6 +15,7 @@ Rules:
 - For outcall: request address and advance payment receipt.
 - For incall: provide address at the allowed step.
 - Never promise availability before checking tools.
+- When calling check_availability, always format start_at as YYYY-MM-DDTHH:MM (e.g. 2026-04-19T20:00). Never use natural language or date-only.
 - If waiting for review, politely ask client to wait briefly.
 
 Tone examples:

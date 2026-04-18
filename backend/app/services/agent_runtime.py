@@ -464,7 +464,11 @@ class AgentRuntimeService:
                 "type": "function",
                 "function": {
                     "name": "check_availability",
-                    "description": "Check slot availability with 15-minute buffer.",
+                    "description": (
+                        "Check slot availability with 15-minute buffer. "
+                        "IMPORTANT: start_at MUST be ISO 8601 with date AND time, "
+                        "e.g. '2026-04-19T20:00'. Never pass date-only or natural language."
+                    ),
                     "parameters": {
                         "type": "object",
                         "properties": {

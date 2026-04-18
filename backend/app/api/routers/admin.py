@@ -312,24 +312,55 @@ async def list_active_sessions(db: AsyncSession = Depends(get_db)) -> Any:
     from sqlalchemy import select
 
     from app.models.conversation_session import ConversationSession
-    from app.models.enums import ConversationState
+    from app.repositories.client_repo import ClientRepository
+
+    result = await db.execute(select(ConversationSession))
+    sessions = result.scalars().all()
+    client_repo = ClientRepository(db)
+    output = []
+    for s in sessions:
+        client = await client_repo.get_by_id(s.client_id)
+        output.append(
+            {
+                "id": str(s.id),
+                "client_id": str(s.client_id),
+                "client_phone_e164": client.phone_e164 if client else None,
+                "worker_id": str(s.worker_id),
+                "state": s.state.value,
+                "last_channel": s.last_channel.value if s.last_channel else None,
+                "last_inbound_at": s.last_inbound_at.isoformat() if s.last_inbound_at else None,
+                "active_booking_id": str(s.active_booking_id) if s.active_booking_id else None,
+            }
+        )
+    # Most recently active first
+    output.sort(key=lambda x: x["last_inbound_at"] or "", reverse=True)
+    return output
+
+
+@router.get("/sessions/{session_id}/messages")
+async def get_session_messages(session_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Any:
+    from app.models.conversation_session import ConversationSession
+    from app.repositories.message_repo import MessageRepository
 
     result = await db.execute(
-        select(ConversationSession).where(
-            ConversationSession.state.notin_([ConversationState.IDLE, ConversationState.PAUSED])
-        )
+        select(ConversationSession).where(ConversationSession.id == session_id)
     )
-    sessions = result.scalars().all()
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    message_repo = MessageRepository(db)
+    messages = await message_repo.list_for_session(session_id)
     return [
         {
-            "id": str(s.id),
-            "client_id": str(s.client_id),
-            "worker_id": str(s.worker_id),
-            "state": s.state.value,
-            "last_channel": s.last_channel.value if s.last_channel else None,
-            "active_booking_id": str(s.active_booking_id) if s.active_booking_id else None,
+            "id": str(m.id),
+            "direction": m.direction.value,
+            "channel": m.channel.value,
+            "sender_type": m.sender_type.value,
+            "body": m.body,
+            "created_at": m.created_at.isoformat(),
         }
-        for s in sessions
+        for m in messages
     ]
 
 

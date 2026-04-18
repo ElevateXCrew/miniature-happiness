@@ -126,10 +126,21 @@ export interface MediaItem {
 export interface ActiveSession {
   id: string;
   client_id: string;
+  client_phone_e164: string | null;
   worker_id: string;
   state: string;
   last_channel: string | null;
+  last_inbound_at: string | null;
   active_booking_id: string | null;
+}
+
+export interface SessionMessage {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  channel: string;
+  sender_type: string;
+  body: string | null;
+  created_at: string;
 }
 
 // ----------------------------------------------------------
