@@ -46,7 +46,7 @@ export type SectionMap = Record<SectionKey, boolean>;
 // ----------------------------------------------------------
 
 export type BookingStatus =
-  | 'collecting_info'
+  | 'draft'
   | 'pending_review'
   | 'confirmed'
   | 'rejected'

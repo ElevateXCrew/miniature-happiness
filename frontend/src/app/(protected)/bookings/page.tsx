@@ -18,7 +18,7 @@ const LIMIT = 20;
 const ALL_STATUSES: BookingStatus[] = [
   'pending_review',
   'confirmed',
-  'collecting_info',
+  'draft',
   'rejected',
   'cancelled',
   'completed',

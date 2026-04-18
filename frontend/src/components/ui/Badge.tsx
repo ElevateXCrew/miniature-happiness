@@ -20,11 +20,12 @@ export function Badge({ children, color = 'default', dot = false }: Props) {
 
 export function bookingStatusColor(status: string): BadgeColor {
   switch (status) {
-    case 'confirmed':   return 'success';
+    case 'confirmed':      return 'success';
     case 'pending_review': return 'warning';
     case 'rejected':
-    case 'cancelled':  return 'danger';
-    case 'completed':  return 'info';
-    default:           return 'default';
+    case 'cancelled':      return 'danger';
+    case 'completed':      return 'info';
+    case 'draft':          return 'accent';
+    default:               return 'default';
   }
 }

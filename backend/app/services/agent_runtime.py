@@ -61,6 +61,33 @@ class AgentRuntimeService:
         self.tool_runner = ToolRunner(db)
         self._openai_client: AsyncOpenAI | None = None
 
+    def _admin_action_fallback_reply(self, inbound_text: str) -> AgentReply | None:
+        """
+        Intercept [ADMIN ACTION: ...] directives when the LLM is unavailable.
+        Returns a static Alysha-voiced reply so the fallback path never garbles
+        a booking decision into a date-collection prompt.
+        """
+        stripped = inbound_text.strip()
+        if not stripped.startswith("[ADMIN ACTION:"):
+            return None
+        lowered = stripped.lower()
+        if "confirmed" in lowered:
+            return AgentReply(
+                text="You're confirmed babe! So excited to see you, it's going to be amazing xx",
+                tool_traces=[],
+            )
+        if "rejected" in lowered:
+            return AgentReply(
+                text="Sorry babe, that slot isn't available now. Want to try a different time? 💕",
+                tool_traces=[],
+            )
+        if "cancelled" in lowered:
+            return AgentReply(
+                text="Booking cancelled babe. Message me whenever you want to rebook 😊",
+                tool_traces=[],
+            )
+        return AgentReply(text="Got it babe, I'll update you shortly 😊", tool_traces=[])
+
     async def generate_reply(
         self,
         session_id: uuid.UUID,
@@ -75,6 +102,13 @@ class AgentRuntimeService:
                 text="Can you send that receipt on WhatsApp on this same number, babe?",
                 tool_traces=[],
             )
+
+        # Admin action directives are handled with a static reply when LLM is
+        # unavailable; when the LLM IS available it processes them naturally.
+        if not settings.openai_api_key.strip():
+            admin_reply = self._admin_action_fallback_reply(inbound_text)
+            if admin_reply is not None:
+                return admin_reply
 
         if settings.openai_api_key.strip():
             try:
@@ -624,6 +658,11 @@ class AgentRuntimeService:
         channel: Channel,
         inbound_text: str,
     ) -> AgentReply:
+        # Admin action directives must never be processed as client input.
+        admin_reply = self._admin_action_fallback_reply(inbound_text)
+        if admin_reply is not None:
+            return admin_reply
+
         session = await self.sessions.get_by_id(session_id)
         if session is None:
             return AgentReply(text="Hey babe, message me again in a sec.", tool_traces=[])

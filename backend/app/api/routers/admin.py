@@ -46,14 +46,21 @@ class SectionPermissionUpdateRequest(BaseModel):
 
 @router.get("/bookings")
 async def list_bookings(
-    status: BookingStatus | None = None,
+    status: str | None = None,
     offset: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     repo = BookingRepository(db)
     client_repo = ClientRepository(db)
-    bookings = await repo.list_for_admin_queue(status=status, offset=offset, limit=limit)
+    # Accept both lowercase (frontend) and uppercase (internal) status values.
+    resolved_status: BookingStatus | None = None
+    if status:
+        try:
+            resolved_status = BookingStatus(status.upper())
+        except ValueError:
+            resolved_status = None
+    bookings = await repo.list_for_admin_queue(status=resolved_status, offset=offset, limit=limit)
 
     items: list[dict[str, Any]] = []
     for b in bookings:
@@ -61,7 +68,7 @@ async def list_bookings(
         items.append(
             {
                 "id": str(b.id),
-                "status": b.status.value,
+                "status": b.status.value.lower(),
                 "client_id": str(b.client_id),
                 "client_phone_e164": client.phone_e164 if client else None,
                 "worker_id": str(b.worker_id),
@@ -94,7 +101,7 @@ async def get_booking(booking_id: uuid.UUID, db: AsyncSession = Depends(get_db))
     has_receipt = any(item.is_receipt for item in media_items)
     return {
         "id": str(booking.id),
-        "status": booking.status.value,
+        "status": booking.status.value.lower(),
         "client_id": str(booking.client_id),
         "client_phone_e164": client.phone_e164 if client else None,
         "worker_id": str(booking.worker_id),
@@ -222,7 +229,7 @@ async def approve_booking(
     )
     if errors:
         raise HTTPException(status_code=422, detail=errors)
-    return {"booking_id": str(booking_id), "status": booking.status.value}
+    return {"booking_id": str(booking_id), "status": booking.status.value.lower()}
 
 
 @router.post("/bookings/{booking_id}/reject")
@@ -240,7 +247,7 @@ async def reject_booking(
     )
     if errors:
         raise HTTPException(status_code=422, detail=errors)
-    return {"booking_id": str(booking_id), "status": booking.status.value}
+    return {"booking_id": str(booking_id), "status": booking.status.value.lower()}
 
 
 @router.post("/bookings/{booking_id}/cancel")
@@ -258,7 +265,7 @@ async def cancel_booking(
     )
     if errors:
         raise HTTPException(status_code=422, detail=errors)
-    return {"booking_id": str(booking_id), "status": booking.status.value}
+    return {"booking_id": str(booking_id), "status": booking.status.value.lower()}
 
 
 @router.post("/bookings/{booking_id}/incall-address-sent")

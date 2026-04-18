@@ -12,11 +12,22 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import metrics
-from app.models.enums import ActorType, AwaitingReviewFrom, BookingStatus, ConversationState
+from app.core.config import settings
+from app.models.enums import (
+    ActorType,
+    AwaitingReviewFrom,
+    BookingStatus,
+    ConversationState,
+    MessageDirection,
+    SenderType,
+)
+from app.models.message import Message
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.booking_repo import BookingRepository
 from app.repositories.client_repo import ClientRepository
+from app.repositories.message_repo import MessageRepository
 from app.repositories.session_repo import SessionRepository
+from app.repositories.worker_repo import WorkerRepository
 from app.services.availability_service import AvailabilityService
 from app.services.event_stream import admin_event_stream
 from app.services.media_service import MediaService
@@ -425,22 +436,95 @@ class BookingService:
         if session is None or session.last_channel is None:
             return
 
-        channel = session.last_channel.value
-        if status == BookingStatus.CONFIRMED:
-            message = "You're confirmed babe. See you soon xx"
-        elif status == BookingStatus.REJECTED:
-            message = "Sorry babe, I can't do that slot now. Want another time?"
+        # Build a scheduled datetime label for use in the admin instruction.
+        if booking.scheduled_start_at:
+            try:
+                start_label = booking.scheduled_start_at.astimezone(
+                    UTC
+                ).strftime("%A %d %B at %H:%M")
+            except Exception:
+                start_label = str(booking.scheduled_start_at)
         else:
-            message = "This booking is cancelled babe. Message me to pick a new time."
+            start_label = "the booking"
 
-        await self.notifications.send_client_message(
+        if status == BookingStatus.CONFIRMED:
+            admin_instruction = (
+                f"[ADMIN ACTION: booking confirmed] "
+                f"Tell the client their booking for {start_label} is confirmed. "
+                f"Sound warm and excited. 1-2 lines max."
+            )
+        elif status == BookingStatus.REJECTED:
+            admin_instruction = (
+                f"[ADMIN ACTION: booking rejected] "
+                f"Apologise warmly that {start_label} isn't available. "
+                f"Invite them to suggest a different time. 1-2 lines max."
+            )
+        else:
+            admin_instruction = (
+                f"[ADMIN ACTION: booking cancelled] "
+                f"Let the client know {start_label} has been cancelled. "
+                f"Invite them to get back in touch to rebook. 1-2 lines max."
+            )
+
+        # Feed the admin instruction through the full LLM pipeline so Alysha
+        # produces the reply in her own voice rather than sending the raw directive.
+        # Import here to avoid circular dependency (booking_service <-> agent_runtime).
+        from app.services.agent_runtime import AgentRuntimeService
+        from app.services.twilio_gateway import TwilioGateway
+
+        worker_repo = WorkerRepository(self.db)
+        worker = await worker_repo.get_active_worker()
+        if worker is None:
+            worker, _ = await worker_repo.get_or_create_default(
+                name=settings.default_worker_name,
+                timezone=settings.default_worker_timezone,
+            )
+
+        runtime = AgentRuntimeService(self.db)
+        channel = session.last_channel
+        reply = await runtime.generate_reply(
+            session_id=session.id,
             client_id=client.id,
+            worker_id=worker.id,
             channel=channel,
-            text=message,
-            context={
+            inbound_text=admin_instruction,
+            attached_media_count=0,
+        )
+
+        gateway = TwilioGateway()
+        send_result = await gateway.send_client_message(
+            to_phone_e164=client.phone_e164,
+            channel=channel.value,
+            text=reply.text,
+        )
+
+        message_repo = MessageRepository(self.db)
+        outbound = Message(
+            session_id=session.id,
+            direction=MessageDirection.OUTBOUND,
+            channel=channel,
+            sender_type=SenderType.AGENT,
+            body=reply.text,
+            twilio_message_sid=send_result.sid,
+            raw_payload={
+                "decision_send": True,
                 "booking_id": str(booking.id),
                 "status": status.value,
-                "origin": "booking_decision",
+                "dispatch": {
+                    "ok": send_result.ok,
+                    "sid": send_result.sid,
+                    "stub": send_result.stub,
+                    "error": send_result.error,
+                },
+            },
+        )
+        await message_repo.save(outbound)
+        admin_event_stream.publish(
+            "booking.decision_message_sent",
+            {
+                "booking_id": str(booking.id),
+                "status": status.value,
+                "message": reply.text,
             },
         )
 

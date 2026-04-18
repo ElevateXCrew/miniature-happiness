@@ -128,7 +128,7 @@ async def test_admin_approve_sends_client_decision_and_notification(
 
     res = await client.post(f"/admin/bookings/{booking.id}/approve", json={"note": "looks good"})
     assert res.status_code == 200
-    assert res.json()["status"] == "CONFIRMED"
+    assert res.json()["status"] == "confirmed"
 
     message_result = await db.execute(
         select(Message)
@@ -344,7 +344,7 @@ async def test_outcall_confirmation_requires_advance_and_receipt(
 
     ok = await client.post(f"/admin/bookings/{booking.id}/approve")
     assert ok.status_code == 200
-    assert ok.json()["status"] == "CONFIRMED"
+    assert ok.json()["status"] == "confirmed"
 
 
 @pytest.mark.asyncio
