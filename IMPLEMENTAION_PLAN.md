@@ -11,6 +11,7 @@ This file is the single execution source of truth for project planning.
 - Phase 6 launch hardening release-candidate gate has been executed and is green (backend lint/types/tests, focused realtime regression, frontend build).
 - Twilio webhook regression tests are aligned with current deterministic contract (empty TwiML response + orchestrator-managed outbound sends).
 - Phase 6 stabilization pass is complete: dashboard fail-soft behavior, availability error recovery, role/section consistency checks, and targeted regression coverage were executed.
+- Post-stabilization booking integrity guard is active: availability success now ensures a persisted draft booking is linked to session context before confirmation/review transitions.
 
 ## Scope Locks (Agreed)
 

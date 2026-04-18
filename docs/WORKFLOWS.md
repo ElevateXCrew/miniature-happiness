@@ -8,10 +8,11 @@
 4. On booking intent, create/update draft booking.
 5. Collect required fields in strict order.
 6. Run availability tool before confirming proposed slot.
-7. Summarize details and request explicit confirmation.
-8. On explicit yes, move to `PENDING_REVIEW` and notify admin + worker.
-9. Tell client to wait briefly.
-10. On approval/rejection event, notify client and finalize state.
+7. Persist/link a draft booking to the active session when availability succeeds (deterministic guard).
+8. Summarize details and request explicit confirmation.
+9. On explicit yes, move to `PENDING_REVIEW` and notify admin + worker.
+10. Tell client to wait briefly.
+11. On approval/rejection event, notify client and finalize state.
 
 ## 2) Outcall Flow with Advance and Receipt
 

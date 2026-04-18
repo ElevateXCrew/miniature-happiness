@@ -2,7 +2,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -106,6 +106,14 @@ class AgentRuntimeService:
         system_prompt = self._load_channel_prompt(channel)
         history = await self.messages.list_for_session(session_id)
 
+        confirm_reply = await self._handle_llm_confirmation_reply(
+            session_id=session_id,
+            inbound_text=inbound_text,
+            history=history,
+        )
+        if confirm_reply is not None:
+            return confirm_reply
+
         chat_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         for msg in history[-12:]:
             role = "user" if msg.direction == MessageDirection.INBOUND else "assistant"
@@ -184,6 +192,62 @@ class AgentRuntimeService:
             tool_traces=tool_traces,
         )
 
+    async def _handle_llm_confirmation_reply(
+        self,
+        *,
+        session_id: uuid.UUID,
+        inbound_text: str,
+        history: list[Any],
+    ) -> AgentReply | None:
+        lowered = inbound_text.strip().lower()
+        if not any(token in lowered for token in _YES_TERMS):
+            return None
+
+        if not self._was_recent_confirmation_prompt(history):
+            return None
+
+        session = await self.sessions.get_by_id(session_id)
+        if session is None or session.active_booking_id is None:
+            return AgentReply(
+                text="I lost that booking draft. Send your date/time and I'll re-check.",
+                tool_traces=[],
+            )
+
+        booking = await self.bookings.get_by_id(session.active_booking_id)
+        if booking is None:
+            return AgentReply(
+                text="I lost that booking draft. Send your date/time and I'll re-check.",
+                tool_traces=[],
+            )
+
+        if booking.status != BookingStatus.DRAFT:
+            return None
+
+        booking_after_submit, errors = await self.booking_service.submit_for_review(
+            booking_id=booking.id,
+            reviewer=AwaitingReviewFrom.ADMIN,
+            actor_type=ActorType.AGENT,
+        )
+        if errors:
+            return AgentReply(text=errors[0], tool_traces=[])
+
+        if booking_after_submit and booking_after_submit.status == BookingStatus.PENDING_REVIEW:
+            return AgentReply(
+                text="Perfect babe, I've sent it for review. Please wait a moment.",
+                tool_traces=[],
+            )
+        return None
+
+    def _was_recent_confirmation_prompt(self, history: list[Any]) -> bool:
+        for msg in reversed(history):
+            if msg.direction != MessageDirection.OUTBOUND:
+                continue
+            body = (msg.body or "").lower()
+            if not body:
+                return False
+            return ("reply yes" in body) or ("to confirm" in body) or ("just to confirm" in body)
+        return False
+
     async def _execute_tool(
         self,
         name: str,
@@ -221,6 +285,13 @@ class AgentRuntimeService:
             )
             return {"ok": False, "error": str(exc)}
 
+        if name == "check_availability" and result.get("ok", False):
+            await self._ensure_draft_booking_after_availability(
+                client_id=client_id,
+                worker_id=worker_id,
+                tool_args=patch_args,
+            )
+
         if result.get("ok"):
             metrics.incr("tool_calls_ok_total")
             event = "tool_execution_ok"
@@ -237,6 +308,75 @@ class AgentRuntimeService:
         if isinstance(result, dict):
             return cast(dict[str, Any], result)
         return {"ok": False, "error": "Tool returned invalid response type."}
+
+    async def _ensure_draft_booking_after_availability(
+        self,
+        *,
+        client_id: uuid.UUID,
+        worker_id: uuid.UUID,
+        tool_args: dict[str, Any],
+    ) -> None:
+        session = await self.sessions.get_active_for_client_worker(client_id, worker_id)
+        if session is None:
+            return
+
+        if session.active_booking_id is not None:
+            active_booking = await self.bookings.get_by_id(session.active_booking_id)
+            if active_booking is not None:
+                return
+
+        existing_draft = await self.bookings.get_active_draft_for_session(session.id)
+        if existing_draft is not None:
+            session.active_booking_id = existing_draft.id
+            await self.sessions.update(session)
+            return
+
+        start_at = self._parse_tool_datetime(tool_args.get("start_at"))
+        duration = self._parse_tool_duration(tool_args.get("duration_minutes"))
+        if start_at is None or duration is None:
+            return
+
+        booking = Booking(
+            client_id=client_id,
+            worker_id=worker_id,
+            session_id=session.id,
+            status=BookingStatus.DRAFT,
+            scheduled_start_at=start_at,
+            duration_minutes=duration,
+            scheduled_end_at=start_at + timedelta(minutes=duration),
+        )
+        await self.bookings.save(booking)
+
+        session.active_booking_id = booking.id
+        if session.state == ConversationState.IDLE:
+            session.state = ConversationState.COLLECTING
+        await self.sessions.update(session)
+
+    def _parse_tool_datetime(self, value: Any) -> datetime | None:
+        if not isinstance(value, str):
+            return None
+        raw = value.strip()
+        if not raw:
+            return None
+        normalized = raw.replace(" ", "T", 1) if " " in raw and "T" not in raw else raw
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+
+    def _parse_tool_duration(self, value: Any) -> int | None:
+        try:
+            minutes = int(value)
+        except (TypeError, ValueError):
+            return None
+        if minutes <= 0:
+            return None
+        return minutes
 
     async def _generate_fallback_reply(
         self,

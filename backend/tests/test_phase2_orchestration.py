@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -6,10 +7,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.booking import Booking
 from app.models.client import Client
 from app.models.conversation_session import ConversationSession
-from app.models.enums import Channel
+from app.models.enums import (
+    BookingStatus,
+    BookingType,
+    Channel,
+    ConversationState,
+    MessageDirection,
+    SenderType,
+)
 from app.models.message import Message
+from app.models.worker import Worker
 from app.services.agent_runtime import AgentRuntimeService
 
 
@@ -173,3 +183,113 @@ async def test_check_availability_tool_call_overrides_invalid_worker_id(
 
     assert result["ok"] is True
     assert "available" in result
+
+
+@pytest.mark.asyncio
+async def test_check_availability_auto_creates_draft_booking_for_active_session(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.IDLE,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    result = await runtime._execute_tool(
+        "check_availability",
+        {
+            "start_at": "2099-01-01T20:00",
+            "duration_minutes": 60,
+        },
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+    )
+
+    assert result["ok"] is True
+
+    booking_result = await db.execute(
+        select(Booking).where(
+            Booking.session_id == session.id,
+            Booking.status == BookingStatus.DRAFT,
+        )
+    )
+    booking = booking_result.scalar_one_or_none()
+    assert booking is not None
+    assert booking.duration_minutes == 60
+
+    refreshed_session = await db.get(ConversationSession, session.id)
+    assert refreshed_session is not None
+    assert refreshed_session.active_booking_id == booking.id
+
+
+@pytest.mark.asyncio
+async def test_llm_yes_reply_submits_active_draft_for_review(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.AWAITING_CLIENT_CONFIRMATION,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
+        duration_minutes=60,
+        scheduled_end_at=datetime.now(UTC) + timedelta(days=1, hours=1),
+        client_age=24,
+        client_ethnicity="British",
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    outbound_prompt = Message(
+        session_id=session.id,
+        direction=MessageDirection.OUTBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.AGENT,
+        body="Just to confirm: tomorrow 8pm for 1 hour. Reply yes to confirm.",
+    )
+    db.add(outbound_prompt)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._generate_llm_reply(
+        session_id=session.id,
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="yes",
+    )
+
+    assert "sent it for review" in reply.text.lower()
+
+    refreshed_booking = await db.get(Booking, booking.id)
+    assert refreshed_booking is not None
+    assert refreshed_booking.status == BookingStatus.PENDING_REVIEW

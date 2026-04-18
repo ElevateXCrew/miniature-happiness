@@ -130,12 +130,14 @@ When everything needed is present:
 - the assistant summarizes the booking clearly
 - asks the client to confirm
 - waits for a direct affirmative response
+- confirmation handling is server-gated so review progression only happens with a persisted draft booking
 
 ---
 
 ### Step 5: Booking Saved
+After availability succeeds, the system ensures a draft booking is persisted and linked to the active session.
 After the client confirms:
-- the booking is saved
+- the booking transitions from draft to review state
 - it becomes visible for admin review
 - the client remains in the conversation with context preserved
 

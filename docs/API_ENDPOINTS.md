@@ -37,6 +37,7 @@ Notes:
 - `POST /agent/process-incoming`
   - Internal endpoint for normalized inbound events.
   - Returns `duplicate` and `replayed` flags for idempotent/replay-safe inbound handling.
+  - Enforces deterministic booking persistence guards: successful availability checks ensure a draft booking is linked to the active session, and explicit client confirmation cannot progress without a persisted draft.
 - `POST /agent/send-message`
   - Internal endpoint for deterministic outbound dispatch.
 
