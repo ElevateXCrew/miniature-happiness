@@ -286,11 +286,14 @@ class NotificationService:
         client_template = (
             "booking_reminder_client_outcall" if is_outcall else "booking_reminder_client_incall"
         )
+        # Resolve the session channel without touching the ORM relationship
+        # (which would trigger a synchronous lazy-load and crash in async context).
+        conv_session = await self.sessions.get_by_id(booking.session_id)
         client_channel = (
             NotificationChannel.WHATSAPP
-            if booking.session
-            and hasattr(booking.session, "last_channel")
-            and str(booking.session.last_channel) == "whatsapp"
+            if conv_session is not None
+            and conv_session.last_channel is not None
+            and str(conv_session.last_channel) == "whatsapp"
             else NotificationChannel.SMS
         )
         client_notif = await self.create(
