@@ -373,7 +373,8 @@ class BookingService:
         metrics.incr("booking_status_transitions_total")
         if status == BookingStatus.CONFIRMED:
             await self.notifications.schedule_booking_reminders(booking.id)
-        await self._send_client_decision_message(booking, status)
+        # Decision message is sent by the router as a BackgroundTask so it
+        # never blocks or rolls back the status-change HTTP response.
         admin_event_stream.publish(
             "booking.status_changed",
             {
@@ -424,7 +425,7 @@ class BookingService:
             session.active_booking_id = None
             await self.session_repo.update_state(session, new_state)
 
-    async def _send_client_decision_message(self, booking: Any, status: BookingStatus) -> None:
+    async def send_client_decision_message(self, booking: Any, status: BookingStatus) -> None:
         if status not in {BookingStatus.CONFIRMED, BookingStatus.REJECTED, BookingStatus.CANCELLED}:
             return
 

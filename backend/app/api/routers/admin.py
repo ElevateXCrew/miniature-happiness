@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -214,9 +214,26 @@ async def get_booking_timeline(booking_id: uuid.UUID, db: AsyncSession = Depends
     return {"booking_id": str(booking_id), "timeline": timeline}
 
 
+async def _dispatch_decision_message(booking_id: uuid.UUID, status: BookingStatus) -> None:
+    """Run in background: open a fresh session and send the client notification."""
+    from app.db.engine import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as bg_db:
+        try:
+            svc = BookingService(bg_db)
+            repo = BookingRepository(bg_db)
+            booking = await repo.get_by_id(booking_id)
+            if booking:
+                await svc.send_client_decision_message(booking, status)
+            await bg_db.commit()
+        except Exception:
+            await bg_db.rollback()
+
+
 @router.post("/bookings/{booking_id}/approve")
 async def approve_booking(
     booking_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     body: BookingActionNote = BookingActionNote(),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
@@ -229,12 +246,14 @@ async def approve_booking(
     )
     if errors:
         raise HTTPException(status_code=422, detail=errors)
+    background_tasks.add_task(_dispatch_decision_message, booking_id, BookingStatus.CONFIRMED)
     return {"booking_id": str(booking_id), "status": booking.status.value.lower()}
 
 
 @router.post("/bookings/{booking_id}/reject")
 async def reject_booking(
     booking_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     body: BookingActionNote = BookingActionNote(),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
@@ -247,12 +266,14 @@ async def reject_booking(
     )
     if errors:
         raise HTTPException(status_code=422, detail=errors)
+    background_tasks.add_task(_dispatch_decision_message, booking_id, BookingStatus.REJECTED)
     return {"booking_id": str(booking_id), "status": booking.status.value.lower()}
 
 
 @router.post("/bookings/{booking_id}/cancel")
 async def cancel_booking(
     booking_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     body: BookingActionNote = BookingActionNote(),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
@@ -265,6 +286,7 @@ async def cancel_booking(
     )
     if errors:
         raise HTTPException(status_code=422, detail=errors)
+    background_tasks.add_task(_dispatch_decision_message, booking_id, BookingStatus.CANCELLED)
     return {"booking_id": str(booking_id), "status": booking.status.value.lower()}
 
 

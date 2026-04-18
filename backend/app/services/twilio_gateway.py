@@ -1,5 +1,7 @@
+import asyncio
 import re
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 from fastapi import Request
@@ -76,7 +78,13 @@ class TwilioGateway:
 
         try:
             client = TwilioRestClient(account_sid, auth_token)
-            msg = client.messages.create(from_=from_num, to=to_num, body=text)
+            # The Twilio REST SDK is synchronous. Run it in a thread-pool
+            # executor so it never blocks the async event loop.
+            loop = asyncio.get_event_loop()
+            msg = await loop.run_in_executor(
+                None,
+                partial(client.messages.create, from_=from_num, to=to_num, body=text),
+            )
             return OutboundSendResult(ok=True, sid=msg.sid)
         except TwilioException as exc:
             return OutboundSendResult(ok=False, sid=None, error=str(exc))

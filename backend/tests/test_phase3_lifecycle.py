@@ -130,6 +130,17 @@ async def test_admin_approve_sends_client_decision_and_notification(
     assert res.status_code == 200
     assert res.json()["status"] == "confirmed"
 
+    # The decision message is dispatched as a BackgroundTask (own session) after
+    # the HTTP response returns, so we trigger it directly here to test it.
+    from app.models.enums import BookingStatus as BS
+    from app.repositories.booking_repo import BookingRepository
+    from app.services.booking_service import BookingService as BkSvc
+
+    booking_fresh = await BookingRepository(db).get_by_id(booking.id)
+    assert booking_fresh is not None
+    await BkSvc(db).send_client_decision_message(booking_fresh, BS.CONFIRMED)
+    await db.flush()
+
     message_result = await db.execute(
         select(Message)
         .where(Message.session_id == session.id, Message.direction == MessageDirection.OUTBOUND)
