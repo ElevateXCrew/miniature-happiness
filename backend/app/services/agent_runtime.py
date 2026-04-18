@@ -439,11 +439,24 @@ class AgentRuntimeService:
 
     def _load_channel_prompt(self, channel: Channel) -> str:
         root = Path(__file__).resolve().parents[3]
+        prompts_dir = root / "prompts"
         file_name = "whatsapp.txt" if channel == Channel.WHATSAPP else "sms.txt"
-        prompt_path = root / "prompts" / file_name
+        prompt_path = prompts_dir / file_name
+        context_path = prompts_dir / "alysha_context.md"
+
+        parts: list[str] = []
+
+        # Inject the Alysha identity/rate context first so the channel prompt
+        # can reference "your profile" without re-stating everything.
+        if context_path.exists():
+            parts.append(context_path.read_text(encoding="utf-8").strip())
+
         if prompt_path.exists():
-            return prompt_path.read_text(encoding="utf-8")
-        return "You are Alysha. Keep messages brief, warm, and human."
+            parts.append(prompt_path.read_text(encoding="utf-8").strip())
+        else:
+            parts.append("You are Alysha. Keep messages brief, warm, and human.")
+
+        return "\n\n---\n\n".join(parts)
 
     def _get_openai_client(self) -> AsyncOpenAI:
         if self._openai_client is None:
@@ -451,12 +464,14 @@ class AgentRuntimeService:
         return self._openai_client
 
     def _ensure_short_style(self, text: str) -> str:
+        # Collapse blank lines but allow multi-line responses (bank details,
+        # confirmation summaries) through.  The system prompt itself instructs
+        # the LLM to keep replies short; we trust it for legitimate multi-line
+        # content rather than blindly truncating.
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         if not lines:
             return "Sure babe."
-        if len(lines) <= 2:
-            return "\n".join(lines)
-        return "\n".join(lines[:2])
+        return "\n".join(lines)
 
     def _tool_specs(self) -> list[dict[str, Any]]:
         return [
