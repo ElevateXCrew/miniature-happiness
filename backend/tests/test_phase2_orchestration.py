@@ -152,3 +152,24 @@ async def test_check_availability_tool_call_patches_missing_worker_id(
 
     assert result["ok"] is True
     assert "available" in result
+
+
+@pytest.mark.asyncio
+async def test_check_availability_tool_call_overrides_invalid_worker_id(
+    db: AsyncSession,
+) -> None:
+    runtime = AgentRuntimeService(db)
+    result = await runtime._execute_tool(
+        "check_availability",
+        {
+            "worker_id": "alysha",
+            "start_at": "2099-01-01T20:00",
+            "duration_minutes": 60,
+        },
+        client_id=uuid.uuid4(),
+        worker_id=uuid.uuid4(),
+        channel=Channel.WHATSAPP,
+    )
+
+    assert result["ok"] is True
+    assert "available" in result
