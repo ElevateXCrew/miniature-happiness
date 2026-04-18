@@ -221,9 +221,18 @@ class BookingService:
 
         validation = self.validate_fields(booking)
         if not validation.complete:
-            return booking, validation.errors or [
-                f"Missing required field: {validation.next_required_field}"
-            ]
+            if validation.errors:
+                return booking, validation.errors
+            # Map internal field names to human-readable collection prompts
+            # so this message is never sent raw to the client.
+            _FIELD_PROMPT: dict[str, str] = {
+                "scheduled_start_at": "I still need the date and time.",
+                "client_age": "I still need to confirm your age.",
+                "client_ethnicity": "I still need your ethnicity.",
+                "duration_minutes": "I still need the duration.",
+            }
+            missing = validation.next_required_field or "a required field"
+            return booking, [_FIELD_PROMPT.get(missing, f"Still missing: {missing}.")]
 
         if booking.scheduled_start_at is None or booking.duration_minutes is None:
             return booking, ["Missing required scheduling fields."]

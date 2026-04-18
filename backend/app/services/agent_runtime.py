@@ -251,6 +251,13 @@ class AgentRuntimeService:
         if booking.status != BookingStatus.DRAFT:
             return None
 
+        # Guard: if required fields are still missing the "yes" is an answer to a
+        # collection question (e.g. "Yes my age is 21"), not a final confirmation.
+        # Let the LLM handle field extraction instead of trying to submit early.
+        next_field = self.booking_service.get_next_required_field(booking)
+        if next_field is not None:
+            return None
+
         booking_after_submit, errors = await self.booking_service.submit_for_review(
             booking_id=booking.id,
             reviewer=AwaitingReviewFrom.ADMIN,
