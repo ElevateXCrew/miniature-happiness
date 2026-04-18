@@ -59,6 +59,44 @@
   padding: var(--space-16);
 }
 
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-4);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.errorTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.errorDetail {
+  font-size: 0.8125rem;
+  color: var(--color-danger, #ef4444);
+  margin: 0;
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.retryBtn {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.retryBtn:hover { background: var(--bg-surface); }
+
 .table {
   width: 100%;
   border-collapse: collapse;

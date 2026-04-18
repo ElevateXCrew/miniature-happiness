@@ -137,15 +137,21 @@ function ChatPanel({
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [agentPaused, setAgentPaused] = useState(false);
   const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await sessionsApi.listActive();
       setSessions(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setLoadError(msg);
+      setSessions([]);
     } finally {
       setLoading(false);
     }
@@ -214,6 +220,13 @@ export default function SessionsPage() {
         <div className={[styles.tableCard, selectedSession ? styles.tableCardSplit : ''].join(' ')}>
           {loading ? (
             <div className={styles.loadingRow}><Spinner /></div>
+          ) : loadError ? (
+            <div className={styles.errorState}>
+              <MessageCircle size={32} />
+              <p className={styles.errorTitle}>Cannot reach the server</p>
+              <p className={styles.errorDetail}>{loadError}</p>
+              <button className={styles.retryBtn} onClick={() => void load()}>Retry</button>
+            </div>
           ) : sessions.length === 0 ? (
             <EmptyState
               icon={<MessageCircle size={40} />}
