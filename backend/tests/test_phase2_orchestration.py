@@ -293,3 +293,92 @@ async def test_llm_yes_reply_submits_active_draft_for_review(
     refreshed_booking = await db.get(Booking, booking.id)
     assert refreshed_booking is not None
     assert refreshed_booking.status == BookingStatus.PENDING_REVIEW
+
+
+@pytest.mark.asyncio
+async def test_sync_draft_from_inbound_sets_booking_type(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    await runtime._sync_draft_from_inbound(session_id=session.id, inbound_text="Incall")
+
+    refreshed_booking = await db.get(Booking, booking.id)
+    assert refreshed_booking is not None
+    assert refreshed_booking.booking_type == BookingType.INCALL
+
+
+@pytest.mark.asyncio
+async def test_override_redundant_time_question_when_time_already_known(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    overridden = await runtime._override_redundant_prompt_for_booking(
+        session_id=session.id,
+        llm_content="Ok babe. What time do you prefer?",
+    )
+
+    assert "what time" not in overridden.lower()
+    assert overridden == "Confirm your age for me please (18+)."

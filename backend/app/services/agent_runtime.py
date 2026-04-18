@@ -17,6 +17,7 @@ from app.models.enums import (
     ActorType,
     AwaitingReviewFrom,
     BookingStatus,
+    BookingType,
     Channel,
     ConversationState,
     MessageDirection,
@@ -103,6 +104,8 @@ class AgentRuntimeService:
         channel: Channel,
         inbound_text: str,
     ) -> AgentReply:
+        await self._sync_draft_from_inbound(session_id=session_id, inbound_text=inbound_text)
+
         system_prompt = self._load_channel_prompt(channel)
         history = await self.messages.list_for_session(session_id)
 
@@ -185,6 +188,10 @@ class AgentRuntimeService:
 
             content = (msg.content or "").strip()
             if content:
+                content = await self._override_redundant_prompt_for_booking(
+                    session_id=session_id,
+                    llm_content=content,
+                )
                 return AgentReply(text=self._ensure_short_style(content), tool_traces=tool_traces)
 
         return AgentReply(
@@ -351,6 +358,74 @@ class AgentRuntimeService:
         if session.state == ConversationState.IDLE:
             session.state = ConversationState.COLLECTING
         await self.sessions.update(session)
+
+    async def _sync_draft_from_inbound(self, *, session_id: uuid.UUID, inbound_text: str) -> None:
+        session = await self.sessions.get_by_id(session_id)
+        if session is None or session.active_booking_id is None:
+            return
+
+        booking = await self.bookings.get_by_id(session.active_booking_id)
+        if booking is None or booking.status != BookingStatus.DRAFT:
+            return
+
+        booking_type = self._extract_booking_type(inbound_text)
+        if booking_type is not None and booking.booking_type is None:
+            await self.booking_service.update_field(
+                booking_id=booking.id,
+                field_name="booking_type",
+                field_value=booking_type.value,
+                actor_type=ActorType.AGENT,
+            )
+
+    def _extract_booking_type(self, text: str) -> BookingType | None:
+        lowered = text.strip().lower()
+        if not lowered:
+            return None
+
+        incall_terms = ("incall", "come to me", "your place")
+        outcall_terms = ("outcall", "come to you", "my place", "hotel")
+
+        if any(term in lowered for term in incall_terms):
+            return BookingType.INCALL
+        if any(term in lowered for term in outcall_terms):
+            return BookingType.OUTCALL
+        return None
+
+    async def _override_redundant_prompt_for_booking(
+        self,
+        *,
+        session_id: uuid.UUID,
+        llm_content: str,
+    ) -> str:
+        session = await self.sessions.get_by_id(session_id)
+        if session is None or session.active_booking_id is None:
+            return llm_content
+
+        booking = await self.bookings.get_by_id(session.active_booking_id)
+        if booking is None or booking.status != BookingStatus.DRAFT:
+            return llm_content
+
+        lowered = llm_content.lower()
+        asks_time = ("what time" in lowered) or ("which time" in lowered)
+        asks_type = ("incall or outcall" in lowered) or (
+            "come to me" in lowered and "come to you" in lowered
+        )
+
+        if asks_time and booking.scheduled_start_at is not None:
+            return self._next_question_for_booking(booking)
+        if asks_type and booking.booking_type is not None:
+            return self._next_question_for_booking(booking)
+        return llm_content
+
+    def _next_question_for_booking(self, booking: Booking) -> str:
+        if booking.booking_type is None:
+            return "Would you prefer incall or outcall, babe?"
+
+        next_field = self.booking_service.get_next_required_field(booking)
+        if next_field is not None:
+            return self._question_for_field(next_field)
+
+        return "Reply yes to confirm and I'll send it for review, babe."
 
     def _parse_tool_datetime(self, value: Any) -> datetime | None:
         if not isinstance(value, str):
