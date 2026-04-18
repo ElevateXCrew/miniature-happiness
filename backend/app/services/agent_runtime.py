@@ -307,6 +307,41 @@ class AgentRuntimeService:
             # Always enforce server-trusted worker identity and ignore model-provided values.
             patch_args["worker_id"] = str(worker_id)
 
+        # Guard: if the LLM passed a non-UUID booking_id (e.g. "DRAFT"), resolve
+        # the real active draft for this client/worker and substitute it in.
+        _BOOKING_ID_TOOLS = {
+            "get_required_next_field",
+            "update_booking_field",
+            "validate_booking_fields",
+            "submit_booking_for_review",
+        }
+        if name in _BOOKING_ID_TOOLS and "booking_id" in patch_args:
+            raw_bid = str(patch_args["booking_id"]).strip()
+            try:
+                uuid.UUID(raw_bid)
+            except ValueError:
+                # Not a real UUID — look up the active draft from the session.
+                session = await self.sessions.get_active_for_client_worker(client_id, worker_id)
+                resolved_id: uuid.UUID | None = None
+                if session is not None and session.active_booking_id is not None:
+                    resolved_id = session.active_booking_id
+                else:
+                    # Fall back to querying the draft directly.
+                    if session is not None:
+                        draft = await self.bookings.get_active_draft_for_session(session.id)
+                        if draft is not None:
+                            resolved_id = draft.id
+                if resolved_id is None:
+                    metrics.incr("tool_calls_failed_total")
+                    return {
+                        "ok": False,
+                        "error": (
+                            f"booking_id '{raw_bid}' is not valid and no active draft found. "
+                            "Call check_availability first to create a draft."
+                        ),
+                    }
+                patch_args["booking_id"] = str(resolved_id)
+
         try:
             result = await method(**patch_args)
         except Exception as exc:
@@ -839,7 +874,8 @@ class AgentRuntimeService:
             else "  Client ethnicity: NOT YET PROVIDED"
         )
         records = [
-            "  Booking status: DRAFT (in progress)",
+            f"  booking_id (use this exact value for tool calls): {booking.id}",
+            "  Collection status: in progress",
             f"  Date & time: {fmt_dt(booking.scheduled_start_at)}",
             f"  Booking type: {booking_type_label}",
             dur_line,
