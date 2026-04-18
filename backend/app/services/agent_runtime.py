@@ -122,7 +122,8 @@ class AgentRuntimeService:
         if status_guard is not None:
             return status_guard
 
-        system_prompt = self._load_channel_prompt(channel)
+        booking_context = await self._build_booking_context_block(session)
+        system_prompt = self._load_channel_prompt(channel, extra_context=booking_context)
         history = await self.messages.list_for_session(session_id)
 
         confirm_reply = await self._handle_llm_confirmation_reply(
@@ -272,7 +273,14 @@ class AgentRuntimeService:
             body = (msg.body or "").lower()
             if not body:
                 return False
-            return ("reply yes" in body) or ("to confirm" in body) or ("just to confirm" in body)
+            return (
+                "reply yes" in body
+                or "to confirm" in body
+                or "just to confirm" in body
+                or "shall i go ahead" in body
+                or "go ahead?" in body
+                or "shall we go ahead" in body
+            )
         return False
 
     async def _execute_tool(
@@ -472,14 +480,36 @@ class AgentRuntimeService:
             return llm_content
 
         lowered = llm_content.lower()
-        asks_time = ("what time" in lowered) or ("which time" in lowered)
+
+        # Detect what the LLM is asking about (broad matching to catch all phrasings).
+        asks_time = (
+            "what date" in lowered
+            or "what time" in lowered
+            or "which time" in lowered
+            or "date and time" in lowered
+            or "date & time" in lowered
+            or "when do you" in lowered
+            or "when would you" in lowered
+        )
         asks_type = ("incall or outcall" in lowered) or (
             "come to me" in lowered and "come to you" in lowered
         )
-        asks_age = ("how old" in lowered) or ("confirm your age" in lowered)
+        asks_age = (
+            "how old" in lowered
+            or "confirm your age" in lowered
+            or "your age" in lowered
+            or "are you 18" in lowered
+            or "age please" in lowered
+        )
         asks_ethnicity = "ethnicity" in lowered
-        asks_duration = ("how long" in lowered) or ("1 hour or 2 hours" in lowered)
+        asks_duration = (
+            "how long" in lowered
+            or "1 hour or 2" in lowered
+            or "duration" in lowered
+            or "how many hours" in lowered
+        )
 
+        # Suppress only if the field is already collected.
         if asks_time and booking.scheduled_start_at is not None:
             return self._next_question_for_booking(booking)
         if asks_type and booking.booking_type is not None:
@@ -730,7 +760,7 @@ class AgentRuntimeService:
             return int(min_match.group(1))
         return None
 
-    def _load_channel_prompt(self, channel: Channel) -> str:
+    def _load_channel_prompt(self, channel: Channel, extra_context: str | None = None) -> str:
         root = Path(__file__).resolve().parents[3]
         prompts_dir = root / "prompts"
         file_name = "whatsapp.txt" if channel == Channel.WHATSAPP else "sms.txt"
@@ -749,7 +779,87 @@ class AgentRuntimeService:
         else:
             parts.append("You are Alysha. Keep messages brief, warm, and human.")
 
+        # Inject live booking state so the LLM never re-asks for fields already collected.
+        if extra_context:
+            parts.append(extra_context)
+
         return "\n\n---\n\n".join(parts)
+
+    async def _build_booking_context_block(self, session: Any) -> str | None:
+        """
+        Build the [Your booking records for this client] block that is injected
+        into every system prompt.  This is the SINGLE source of truth the LLM
+        uses to know which fields are already collected so it never re-asks them.
+        """
+        now_uk = datetime.now(UTC).strftime("%A, %d %B %Y — %H:%M")
+        lines: list[str] = [
+            f"[Current date and time in UK]: {now_uk}",
+        ]
+
+        booking: Any = None
+        if session.active_booking_id is not None:
+            booking = await self.bookings.get_by_id(session.active_booking_id)
+
+        if booking is None or booking.status not in (BookingStatus.DRAFT,):
+            # No active draft — give the LLM just the current time.
+            lines.append("[Your booking records for this client]: No active booking draft.")
+            return "\n".join(lines)
+
+        # Format the draft booking fields for the LLM.
+        def fmt_dt(value: Any) -> str:
+            if value is None:
+                return "NOT YET PROVIDED"
+            try:
+                return str(value.astimezone(UTC).strftime("%A %d %B %Y at %H:%M"))
+            except Exception:
+                return str(value)
+
+        booking_type_label = (
+            booking.booking_type.value.capitalize() if booking.booking_type else "NOT YET PROVIDED"
+        )
+
+        dur_line = (
+            f"  Duration: {booking.duration_minutes} mins"
+            if booking.duration_minutes
+            else "  Duration: NOT YET PROVIDED"
+        )
+        name_line = (
+            f"  Client name: {booking.client_name}"
+            if booking.client_name
+            else "  Client name: not provided (optional)"
+        )
+        age_line = (
+            f"  Client age: {booking.client_age}"
+            if booking.client_age is not None
+            else "  Client age: NOT YET PROVIDED"
+        )
+        eth_line = (
+            f"  Client ethnicity: {booking.client_ethnicity}"
+            if booking.client_ethnicity
+            else "  Client ethnicity: NOT YET PROVIDED"
+        )
+        records = [
+            "  Booking status: DRAFT (in progress)",
+            f"  Date & time: {fmt_dt(booking.scheduled_start_at)}",
+            f"  Booking type: {booking_type_label}",
+            dur_line,
+            name_line,
+            age_line,
+            eth_line,
+        ]
+
+        lines.append("[Your booking records for this client]:")
+        lines.extend(records)
+        collection_order = (
+            "date/time -> booking type -> duration -> name (optional)"
+            " -> age -> ethnicity -> size -> alone policy -> confirmation"
+        )
+        lines.append(
+            "\nIMPORTANT: NEVER ask for a field that already has a value above. "
+            "Move directly to the next NOT YET PROVIDED field in the collection order: "
+            + collection_order + "."
+        )
+        return "\n".join(lines)
 
     def _get_openai_client(self) -> AsyncOpenAI:
         if self._openai_client is None:
