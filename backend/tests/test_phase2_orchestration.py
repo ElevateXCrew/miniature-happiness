@@ -382,3 +382,138 @@ async def test_override_redundant_time_question_when_time_already_known(
 
     assert "what time" not in overridden.lower()
     assert overridden == "Confirm your age for me please (18+)."
+
+
+@pytest.mark.asyncio
+async def test_llm_greeting_does_not_force_booking_prompt_when_idle(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.IDLE,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._generate_llm_reply(
+        session_id=session.id,
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="Hi",
+    )
+
+    assert "date and time" not in reply.text.lower()
+    assert "hi babe" in reply.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_llm_yes_when_awaiting_confirmation_submits_without_recent_prompt_match(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.AWAITING_CLIENT_CONFIRMATION,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+        client_age=21,
+        client_ethnicity="Asian",
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._generate_llm_reply(
+        session_id=session.id,
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="Yes",
+    )
+
+    assert "sent it for review" in reply.text.lower()
+    refreshed_booking = await db.get(Booking, booking.id)
+    assert refreshed_booking is not None
+    assert refreshed_booking.status == BookingStatus.PENDING_REVIEW
+
+
+@pytest.mark.asyncio
+async def test_pending_review_status_guard_avoids_reasking_fields(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.WAITING_REVIEW,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.PENDING_REVIEW,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+        client_age=21,
+        client_ethnicity="Asian",
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._generate_llm_reply(
+        session_id=session.id,
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="Yes babe",
+    )
+
+    assert "with admin now" in reply.text.lower()
+    assert "confirm your age" not in reply.text.lower()

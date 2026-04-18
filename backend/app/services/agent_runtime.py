@@ -104,7 +104,23 @@ class AgentRuntimeService:
         channel: Channel,
         inbound_text: str,
     ) -> AgentReply:
+        session = await self.sessions.get_by_id(session_id)
+        if session is None:
+            return AgentReply(text="Hey babe 😘", tool_traces=[])
+
+        if (
+            session.active_booking_id is None
+            and session.state == ConversationState.IDLE
+            and not any(term in inbound_text.lower() for term in _BOOKING_INTENT_TERMS)
+            and self._is_smalltalk_or_greeting(inbound_text)
+        ):
+            return AgentReply(text="Hi babe 😘", tool_traces=[])
+
         await self._sync_draft_from_inbound(session_id=session_id, inbound_text=inbound_text)
+
+        status_guard = await self._handle_active_booking_status_guard(session)
+        if status_guard is not None:
+            return status_guard
 
         system_prompt = self._load_channel_prompt(channel)
         history = await self.messages.list_for_session(session_id)
@@ -210,11 +226,15 @@ class AgentRuntimeService:
         if not any(token in lowered for token in _YES_TERMS):
             return None
 
-        if not self._was_recent_confirmation_prompt(history):
+        session = await self.sessions.get_by_id(session_id)
+        if session is None:
             return None
 
-        session = await self.sessions.get_by_id(session_id)
-        if session is None or session.active_booking_id is None:
+        if session.state != ConversationState.AWAITING_CLIENT_CONFIRMATION:
+            if not self._was_recent_confirmation_prompt(history):
+                return None
+
+        if session.active_booking_id is None:
             return AgentReply(
                 text="I lost that booking draft. Send your date/time and I'll re-check.",
                 tool_traces=[],
@@ -377,6 +397,52 @@ class AgentRuntimeService:
                 actor_type=ActorType.AGENT,
             )
 
+    async def _handle_active_booking_status_guard(
+        self,
+        session: Any,
+    ) -> AgentReply | None:
+        if session.active_booking_id is None:
+            return None
+
+        booking = await self.bookings.get_by_id(session.active_booking_id)
+        if booking is None:
+            return None
+
+        if booking.status == BookingStatus.PENDING_REVIEW:
+            return AgentReply(
+                text="Perfect babe, it's with admin now. I'll update you soon.",
+                tool_traces=[],
+            )
+
+        if booking.status == BookingStatus.CONFIRMED:
+            return AgentReply(
+                text="You're confirmed babe. See you soon xx",
+                tool_traces=[],
+            )
+
+        return None
+
+    def _is_smalltalk_or_greeting(self, text: str) -> bool:
+        lowered = text.strip().lower()
+        if not lowered:
+            return True
+
+        greetings = {
+            "hi",
+            "hey",
+            "hello",
+            "hiya",
+            "yo",
+            "good morning",
+            "good afternoon",
+            "good evening",
+            "how are you",
+        }
+        compact = re.sub(r"[^a-z\s]", "", lowered).strip()
+        if compact in greetings:
+            return True
+        return any(compact.startswith(g + " ") for g in greetings)
+
     def _extract_booking_type(self, text: str) -> BookingType | None:
         lowered = text.strip().lower()
         if not lowered:
@@ -410,10 +476,19 @@ class AgentRuntimeService:
         asks_type = ("incall or outcall" in lowered) or (
             "come to me" in lowered and "come to you" in lowered
         )
+        asks_age = ("how old" in lowered) or ("confirm your age" in lowered)
+        asks_ethnicity = "ethnicity" in lowered
+        asks_duration = ("how long" in lowered) or ("1 hour or 2 hours" in lowered)
 
         if asks_time and booking.scheduled_start_at is not None:
             return self._next_question_for_booking(booking)
         if asks_type and booking.booking_type is not None:
+            return self._next_question_for_booking(booking)
+        if asks_age and booking.client_age is not None:
+            return self._next_question_for_booking(booking)
+        if asks_ethnicity and booking.client_ethnicity is not None:
+            return self._next_question_for_booking(booking)
+        if asks_duration and booking.duration_minutes is not None:
             return self._next_question_for_booking(booking)
         return llm_content
 
