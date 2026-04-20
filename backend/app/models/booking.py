@@ -62,6 +62,8 @@ class Booking(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     client_age: Mapped[int | None] = mapped_column(Integer, nullable=True)
     client_ethnicity: Mapped[str | None] = mapped_column(Text, nullable=True)
     client_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_size_inches: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    alone_policy_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Location
     outcall_address: Mapped[str | None] = mapped_column(Text, nullable=True)

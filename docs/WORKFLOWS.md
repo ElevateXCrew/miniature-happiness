@@ -6,16 +6,19 @@
 2. Normalize phone, resolve client, load active session.
 3. Agent sends short natural response (Alysha persona).
 4. On booking intent, create/update draft booking.
-5. Collect required fields in strict order.
-6. Before LLM generation, runtime pre-captures the next required field from inbound text when possible.
-7. Run availability tool before confirming proposed slot.
-8. Persist/link a draft booking to the active session when availability succeeds (deterministic guard).
-9. Summarize details and request explicit confirmation.
-10. On explicit yes, move to `PENDING_REVIEW` and notify admin + worker.
-11. Tell client to wait briefly.
-12. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
-13. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
-14. Finalize state and emit admin sync events.
+5. Collect required fields in strict order: datetime -> booking type -> duration -> outcall address(if outcall) -> age -> ethnicity -> size -> alone policy.
+6. Start collection with a soft consent line before ordered questions.
+7. Before LLM generation, runtime pre-captures the next required field from inbound text when possible.
+8. Runtime blocks out-of-order/hallucinated field saves unless the value is present in current inbound text.
+9. Run availability tool before confirming proposed slot.
+10. Persist/link a draft booking to the active session when availability succeeds (deterministic guard).
+11. Summarize details and request explicit confirmation.
+12. For incall, include address only in final confirmation summary (not immediately after booking type).
+13. On explicit yes (including short confirmations like ok/okay/fine where applicable), move to `PENDING_REVIEW` and notify admin + worker.
+14. Tell client to wait briefly.
+15. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
+16. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
+17. Finalize state and emit admin sync events.
 
 ## 2) Outcall Flow with Advance and Receipt
 

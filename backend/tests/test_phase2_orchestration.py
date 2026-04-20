@@ -261,6 +261,8 @@ async def test_llm_yes_reply_submits_active_draft_for_review(
         scheduled_end_at=datetime.now(UTC) + timedelta(days=1, hours=1),
         client_age=24,
         client_ethnicity="British",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
     )
     db.add(booking)
     await db.flush()
@@ -288,7 +290,7 @@ async def test_llm_yes_reply_submits_active_draft_for_review(
         inbound_text="yes",
     )
 
-    assert "sent it for review" in reply.text.lower()
+    assert "finalizing" in reply.text.lower()
 
     refreshed_booking = await db.get(Booking, booking.id)
     assert refreshed_booking is not None
@@ -384,6 +386,110 @@ async def test_pre_capture_required_field_from_inbound_updates_age(
     assert refreshed_booking is not None
     assert refreshed_booking.client_age == 24
     assert runtime.booking_service.get_next_required_field(refreshed_booking) == "client_ethnicity"
+
+
+@pytest.mark.asyncio
+async def test_pre_capture_alone_policy_accepts_ok_reply(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+        client_age=24,
+        client_ethnicity="British",
+        client_size_inches=4,
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    await runtime._pre_capture_required_field_from_inbound(
+        session_id=session.id,
+        inbound_text="ok that's fine",
+    )
+
+    refreshed_booking = await db.get(Booking, booking.id)
+    assert refreshed_booking is not None
+    assert refreshed_booking.alone_policy_confirmed is True
+
+
+@pytest.mark.asyncio
+async def test_update_booking_field_rejects_out_of_order_hallucinated_save(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    result = await runtime._execute_tool(
+        "update_booking_field",
+        {
+            "booking_id": str(booking.id),
+            "field_name": "client_size_inches",
+            "field_value": 4,
+        },
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="ok than book my session",
+    )
+
+    assert result["ok"] is False
+    assert "collect" in str(result.get("error", "")).lower()
 
 
 @pytest.mark.asyncio
@@ -493,6 +599,8 @@ async def test_llm_yes_when_awaiting_confirmation_submits_without_recent_prompt_
         scheduled_end_at=start_at + timedelta(minutes=60),
         client_age=21,
         client_ethnicity="Asian",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
     )
     db.add(booking)
     await db.flush()
@@ -510,7 +618,7 @@ async def test_llm_yes_when_awaiting_confirmation_submits_without_recent_prompt_
         inbound_text="Yes",
     )
 
-    assert "sent it for review" in reply.text.lower()
+    assert "finalizing" in reply.text.lower()
     refreshed_booking = await db.get(Booking, booking.id)
     assert refreshed_booking is not None
     assert refreshed_booking.status == BookingStatus.PENDING_REVIEW

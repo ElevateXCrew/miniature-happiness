@@ -33,16 +33,24 @@ from app.services.event_stream import admin_event_stream
 from app.services.media_service import MediaService
 from app.services.notification_service import NotificationService
 
-# Required field collection order (matches STATE_MACHINE.md)
+# Required field collection order (matches STATE_MACHINE.md and prompt booking steps)
+# Step order: 1-date, 2-type, 3-duration, 4-address(outcall), 5-name(optional),
+#            6-age, 7-ethnicity, 7b-size, 8-alone_policy
 REQUIRED_FIELD_ORDER = [
-    "scheduled_start_at",
-    "client_age",
-    "client_ethnicity",
-    "duration_minutes",
-    # client_name is optional — not in required list
+    "scheduled_start_at",        # Step 1 — Date & time (CRITICAL: must be first)
+    # Step 2 — Booking type (CRITICAL: must come before duration/address)
+    "booking_type",
+    "duration_minutes",          # Step 3 — Duration (after type so we can quote correct rate)
+    "client_age",                # Step 6 — Age (MANDATORY, guard: must be 18+)
+    "client_ethnicity",          # Step 7 — Ethnicity (MANDATORY)
+    "client_size_inches",        # Step 7b — Size screening (MANDATORY, guard: <= 6 inches)
+    "alone_policy_confirmed",    # Step 8 — Alone policy (MANDATORY)
 ]
 
-OPTIONAL_FIELDS = ["client_name"]
+OPTIONAL_FIELDS = [
+    "client_name",               # Step 5 — Name (OPTIONAL: accepted if skipped)
+    "outcall_address",           # Step 4 — Address (only for outcall bookings)
+]
 
 
 @dataclass
@@ -68,7 +76,21 @@ class BookingService:
     # ------------------------------------------------------------------
 
     def get_next_required_field(self, booking: Any) -> str | None:
-        """Returns the name of the next unfilled required field, or None if all done."""
+        """
+        Returns the name of the next unfilled required field, or None if all done.
+        Special logic: outcall_address is required only for OUTCALL bookings,
+        and must be collected after duration but before client details.
+        """
+        # For OUTCALL bookings, check if we need the address first
+        # (after booking_type and duration but before client age/ethnicity)
+        if (
+            booking.booking_type is not None
+            and booking.booking_type.value == "outcall"
+            and booking.duration_minutes is not None
+            and not (booking.outcall_address or "").strip()
+        ):
+            return "outcall_address"
+
         for field in REQUIRED_FIELD_ORDER:
             value = getattr(booking, field, None)
             if value is None:
@@ -90,6 +112,14 @@ class BookingService:
         # Duration guard
         if booking.duration_minutes is not None and booking.duration_minutes <= 0:
             errors.append("Duration must be a positive number of minutes.")
+
+        # Size screening guard
+        if booking.client_size_inches is not None and booking.client_size_inches > 6:
+            errors.append("Client size exceeds allowed limit.")
+
+        # Alone policy guard
+        if booking.alone_policy_confirmed is False:
+            errors.append("Booking must be one-on-one only.")
 
         complete = next_field is None and len(errors) == 0
         return FieldValidationResult(
@@ -132,6 +162,30 @@ class BookingService:
                 errors.append("Ethnicity cannot be blank.")
                 return booking, errors
             booking.client_ethnicity = str(field_value).strip()
+
+        elif field_name == "client_size_inches":
+            try:
+                size_inches = int(field_value)
+            except (TypeError, ValueError):
+                errors.append("Size must be a number in inches.")
+                return booking, errors
+            if size_inches <= 0:
+                errors.append("Size must be greater than 0.")
+                return booking, errors
+            booking.client_size_inches = size_inches
+
+        elif field_name == "alone_policy_confirmed":
+            if isinstance(field_value, str):
+                normalized = field_value.strip().lower()
+                if normalized in {"yes", "y", "true", "1"}:
+                    booking.alone_policy_confirmed = True
+                elif normalized in {"no", "n", "false", "0"}:
+                    booking.alone_policy_confirmed = False
+                else:
+                    errors.append("Please confirm if it will be one-on-one.")
+                    return booking, errors
+            else:
+                booking.alone_policy_confirmed = bool(field_value)
 
         elif field_name == "scheduled_start_at":
             if isinstance(field_value, str):
@@ -238,9 +292,14 @@ class BookingService:
             # so this message is never sent raw to the client.
             _FIELD_PROMPT: dict[str, str] = {
                 "scheduled_start_at": "I still need the date and time.",
+                "booking_type": "I need to know if you want incall or outcall.",
+                "duration_minutes": "I still need the duration.",
+                "outcall_address": "I still need your address (for outcalls).",
+                "client_name": "I still need your name (you can skip this if you prefer).",
                 "client_age": "I still need to confirm your age.",
                 "client_ethnicity": "I still need your ethnicity.",
-                "duration_minutes": "I still need the duration.",
+                "client_size_inches": "I still need to ask one more thing.",
+                "alone_policy_confirmed": "I still need to confirm one more detail.",
             }
             missing = validation.next_required_field or "a required field"
             return booking, [_FIELD_PROMPT.get(missing, f"Still missing: {missing}.")]
@@ -309,6 +368,9 @@ class BookingService:
         booking = await self.repo.get_by_id(booking_id)
         if not booking:
             return None, ["Booking not found."]
+
+        if booking.status == status:
+            return booking, []
 
         allowed = self._allowed_transitions(booking.status)
         if status not in allowed:
