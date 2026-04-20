@@ -13,8 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth import get_current_user, require_role
 from app.db.engine import get_db
+from app.models.booking import Booking
 from app.models.booking_media import BookingMedia
-from app.models.enums import ActorType, BookingStatus, SectionKey, UserRole
+from app.models.enums import ActorType, BookingStatus, ConversationState, SectionKey, UserRole
+from app.models.notification import Notification
 from app.models.user import User
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.booking_repo import BookingRepository
@@ -411,18 +413,54 @@ async def clear_session_messages(
     message_repo = MessageRepository(db)
     deleted_count = await message_repo.delete_for_session(session_id)
 
+    bookings_result = await db.execute(select(Booking).where(Booking.session_id == session.id))
+    bookings = list(bookings_result.scalars().all())
+    booking_ids = [booking.id for booking in bookings]
+
+    media_result = await db.execute(
+        select(BookingMedia).where(BookingMedia.session_id == session.id)
+    )
+    media_items = list(media_result.scalars().all())
+    for media in media_items:
+        await db.delete(media)
+
+    deleted_notifications = 0
+    for booking_id in booking_ids:
+        notifications_result = await db.execute(
+            select(Notification).where(Notification.booking_id == booking_id)
+        )
+        notifications = list(notifications_result.scalars().all())
+        for notification in notifications:
+            await db.delete(notification)
+        deleted_notifications += len(notifications)
+
+    for booking in bookings:
+        await db.delete(booking)
+
+    session.active_booking_id = None
+    session.state = ConversationState.IDLE
+    await db.flush()
+
     await AuditRepository(db).log(
         entity_type="conversation_session",
         entity_id=session.id,
         event_type="messages.cleared",
         actor_type=ActorType.ADMIN,
         actor_ref=str(current_user.id),
-        metadata={"deleted_count": deleted_count},
+        metadata={
+            "deleted_messages": deleted_count,
+            "deleted_media": len(media_items),
+            "deleted_bookings": len(bookings),
+            "deleted_notifications": deleted_notifications,
+        },
     )
 
     return {
         "session_id": str(session_id),
         "deleted_count": deleted_count,
+        "deleted_media_count": len(media_items),
+        "deleted_booking_count": len(bookings),
+        "deleted_notification_count": deleted_notifications,
     }
 
 

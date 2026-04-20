@@ -9,6 +9,7 @@
 - Admin Live Chat now supports explicit conversation-history clearing per session via admin-only action, with audit logging.
 - Collection anti-repeat guard is improved: runtime now pre-captures the next required field from inbound text before LLM generation to reduce duplicate re-asking.
 - Collection anti-hallucination guard is active: runtime now blocks out-of-order or unsupported `update_booking_field` saves unless the value is present in the current client inbound text.
+- Age capture hardening is active: client age is only accepted from explicit age statements (not inferred from unrelated numbers like times).
 - One-on-one confirmation parsing now accepts short confirmations like `ok/okay/fine` to avoid repeated alone-policy re-asks.
 - Collection tone hardening is active: booking collection starts with a soft consent line before ordered questions.
 - Incall address timing rule is enforced: address is shared in final confirmation summary, not immediately after incall selection.
@@ -18,6 +19,7 @@
 - Worker mobile chat-first execution is active: `POST /worker/messages` now supports query, command, client relay, and free-form agent chat intents with structured `executed_actions` in response.
 - Runtime facade split is now active: worker chat/relay paths use a worker runtime facade and worker prompt policy, while client inbound and admin decision messaging use a client runtime facade over shared core logic.
 - Worker realtime stream now carries worker-targeted chat and operation updates (`worker.chat_reply`, `worker.operation.completed`) plus worker-owned booking lifecycle updates.
+- Admin delete-history now clears full session artifacts: messages, linked media, linked notifications, and linked bookings (including draft/confirmed), then resets session state.
 - Current backend verification snapshot: 62 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.
 

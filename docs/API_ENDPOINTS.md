@@ -40,6 +40,7 @@ Notes:
   - Enforces deterministic booking persistence guards: successful availability checks ensure a draft booking is linked to the active session, and explicit client confirmation cannot progress without a persisted draft.
   - Applies deterministic pre-capture for the next required booking field from inbound text before LLM generation to reduce repeated follow-up questions.
   - Applies anti-hallucination guards for booking collection: tool updates are rejected when a field is out-of-order or value is not supported by current inbound client text.
+  - Age extraction accepts only explicit age statements (for example "I am 24" / "24 years old") to avoid inferred values from unrelated numbers.
   - One-on-one confirmation parser accepts short positive replies (`ok`, `okay`, `fine`) to prevent repeated re-asking.
   - Incall address is shared at final confirmation summary stage, not immediately after incall selection.
   - When inbound media is present, attachment context is injected into runtime inbound text so Alysha can respond naturally to image-only messages.
@@ -62,6 +63,7 @@ Notes:
 - `GET /admin/sessions/active`
 - `DELETE /admin/sessions/{session_id}/messages`
   - Clears stored conversation messages for that session from admin live chat.
+  - Also removes session-linked `bookings` (draft/pending/confirmed/etc.), linked `booking_media`, and linked `notifications`, then resets session state to `idle` and `active_booking_id=null`.
   - Admin-only action with audit event `messages.cleared`.
 - `GET /admin/notifications`
 - `POST /admin/agent/pause`

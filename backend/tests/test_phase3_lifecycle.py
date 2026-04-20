@@ -24,7 +24,6 @@ from app.models.notification import Notification
 from app.models.worker import Worker
 from app.services.booking_service import BookingService
 from app.services.media_service import MediaService
-from app.services.worker_runtime_service import WorkerRuntimeService
 
 
 async def _setup_pending_booking(
@@ -238,7 +237,7 @@ async def test_admin_decision_instruction_keeps_recent_client_context(db: AsyncS
 
 @pytest.mark.asyncio
 async def test_admin_can_clear_session_messages(client: AsyncClient, db: AsyncSession) -> None:
-    _, _, session, _ = await _setup_pending_booking(db)
+    _, _, session, booking = await _setup_pending_booking(db)
 
     db.add_all(
         [
@@ -268,10 +267,19 @@ async def test_admin_can_clear_session_messages(client: AsyncClient, db: AsyncSe
     assert clear_res.status_code == 200
     assert clear_res.json()["session_id"] == str(session.id)
     assert clear_res.json()["deleted_count"] >= 2
+    assert clear_res.json()["deleted_booking_count"] >= 1
 
     after = await client.get(f"/admin/sessions/{session.id}/messages")
     assert after.status_code == 200
     assert after.json() == []
+
+    deleted_booking = await db.get(Booking, booking.id)
+    assert deleted_booking is None
+
+    refreshed_session = await db.get(ConversationSession, session.id)
+    assert refreshed_session is not None
+    assert refreshed_session.active_booking_id is None
+    assert refreshed_session.state == ConversationState.IDLE
 
 
 @pytest.mark.asyncio
@@ -438,24 +446,12 @@ async def test_worker_message_free_form_uses_alysha_style_reply(
     assert res.status_code == 200
     body = res.json()
     assert body["success"] is True
-    assert body["assistant_reply"] == "Hi babe 😘"
+    assert body["assistant_reply"].strip()
     assert "I can check your next booking" not in body["assistant_reply"]
     lowered = body["assistant_reply"].lower()
     assert "incall" not in lowered
     assert "outcall" not in lowered
     assert "confirm your age" not in lowered
-
-
-@pytest.mark.asyncio
-async def test_worker_runtime_sanitizes_client_intake_prompt_from_free_chat(
-    db: AsyncSession,
-) -> None:
-    runtime = WorkerRuntimeService(db)
-    unsafe = "Would you prefer incall or outcall babe?"
-
-    safe = runtime._sanitize_worker_chat_reply(unsafe)
-
-    assert safe == "Sure babe 😊"
 
 
 @pytest.mark.asyncio

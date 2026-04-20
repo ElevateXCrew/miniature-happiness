@@ -10,6 +10,7 @@
 6. Start collection with a soft consent line before ordered questions.
 7. Before LLM generation, runtime pre-captures the next required field from inbound text when possible.
 8. Runtime blocks out-of-order/hallucinated field saves unless the value is present in current inbound text.
+8a. Age is captured only from explicit age statements; runtime does not infer age from unrelated numeric text.
 9. Run availability tool before confirming proposed slot.
 10. Persist/link a draft booking to the active session when availability succeeds (deterministic guard).
 11. Summarize details and request explicit confirmation.
@@ -107,8 +108,10 @@
 1. Admin opens Live Chat and selects a session.
 2. Admin clicks Delete History and confirms the destructive action.
 3. Backend clears `messages` rows for that session via admin-only endpoint.
-4. Backend writes audit event `messages.cleared` with deleted message count.
-5. Chat panel refreshes to an empty history state for that session.
+4. Backend deletes linked session artifacts: `bookings`, `booking_media`, and `notifications` tied to those bookings.
+5. Backend resets session state to `idle` with `active_booking_id=null`.
+6. Backend writes audit event `messages.cleared` with deleted counts.
+7. Chat panel refreshes to an empty history state for that session.
 
 ## 11) Availability Error Recovery
 
