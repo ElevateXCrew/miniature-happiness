@@ -132,6 +132,38 @@ All worker APIs require:
 
 Use direct action routes only when the app explicitly needs one-shot operational calls.
 
+## Integration Notes (Read Before Implementation)
+
+1. Always derive identity from token-backed APIs:
+- Read `worker_id` from `GET /auth/me` and reuse that exact value for worker endpoints.
+- Do not use cached or hard-coded worker IDs across accounts/sessions.
+
+2. Gate chat UI by effective section access:
+- Before enabling chat input, check `GET /ui/sections` and require `sections.live_chat = true`.
+- A `403` from `POST /worker/messages` is expected when `live_chat` is disabled by admin.
+
+3. Handle `403` deterministically on worker chat:
+- On first `403`, re-fetch `/ui/sections` once.
+- If `live_chat` is false, show a clear "Chat disabled by admin" state.
+- If `live_chat` is true, treat as identity mismatch risk and refresh `/auth/me` to confirm `worker_id`.
+
+4. Keep worker chat as the main action path:
+- Route worker intents through `POST /worker/messages` for query/command/relay behavior.
+- Keep direct endpoints (`/worker/bookings/*`, `/worker/availability/*`) as optional fallbacks only.
+
+5. Parse SSE correctly:
+- Ignore keepalive comment frames (lines that start with `:`).
+- Persist last processed event `id` and send it as `Last-Event-ID` on reconnect.
+- Event ordering is incremental; apply events in receive order.
+
+6. Token refresh policy:
+- On `401`, refresh once via `/auth/refresh` and retry the original request once.
+- If refresh fails, clear session and force login.
+
+7. Worker message payload compatibility:
+- `POST /worker/messages` response includes both `assistant_reply` and `message` (same text).
+- Prefer `assistant_reply` in new clients; keep `message` fallback for compatibility.
+
 ## 1) Upcoming Bookings
 
 - `GET /worker/bookings/upcoming?worker_id=<worker_uuid>`
