@@ -150,6 +150,7 @@ Use direct action routes only when the app explicitly needs one-shot operational
 4. Keep worker chat as the main action path:
 - Route worker intents through `POST /worker/messages` for query/command/relay behavior.
 - Keep direct endpoints (`/worker/bookings/*`, `/worker/availability/*`) as optional fallbacks only.
+- Worker chat/rewrite responses are generated via worker runtime policy (separate from client intake runtime behavior).
 
 5. Parse SSE correctly:
 - Ignore keepalive comment frames (lines that start with `:`).

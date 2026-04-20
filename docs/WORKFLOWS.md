@@ -35,7 +35,7 @@
 
 1. Worker sends relay command via `POST /worker/messages` (e.g. "tell client to ...").
 2. Backend resolves current/next booking client and active session channel.
-3. Agent runtime rewrites worker instruction into a natural Alysha client-facing message.
+3. Worker runtime facade rewrites worker instruction into a natural Alysha client-facing message.
 4. Twilio sends runtime-generated text to client.
 5. Outbound message is persisted with `worker_instruction` metadata for traceability.
 6. Worker receives operation result + assistant reply payload.
@@ -56,7 +56,7 @@
 2. Worker sends natural-language prompt to `POST /worker/messages`.
 3. Backend resolves one of: query intent, command intent, or client relay intent.
 4. Backend executes deterministic operation(s) and returns `assistant_reply` plus `executed_actions`.
-5. Free-form worker chat uses the Alysha agent runtime, so short greetings and general chat no longer fall back to a canned helper line.
+5. Free-form worker chat uses worker runtime facade + worker prompt policy (separate from client intake runtime), so worker prompts are handled as worker-assistant chat.
 6. Worker stream emits chat/operation updates:
 	- `worker.chat_reply`
 	- `worker.operation.completed`

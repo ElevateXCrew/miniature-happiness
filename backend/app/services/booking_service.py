@@ -560,10 +560,9 @@ class BookingService:
             return
         admin_instruction = await self._build_agent_decision_instruction(booking, status)
 
-        # Route admin decisions through a dedicated runtime path so Alysha's
-        # message stays consistent with the previous conversation context.
-        # Import here to avoid circular dependency (booking_service <-> agent_runtime).
-        from app.services.agent_runtime import AgentRuntimeService
+        # Route admin decisions through the client runtime facade so this path
+        # remains isolated from worker-facing runtime behavior.
+        from app.services.client_runtime_service import ClientRuntimeService
         from app.services.twilio_gateway import TwilioGateway
 
         worker_repo = WorkerRepository(self.db)
@@ -574,7 +573,7 @@ class BookingService:
                 timezone=settings.default_worker_timezone,
             )
 
-        runtime = AgentRuntimeService(self.db)
+        runtime = ClientRuntimeService(self.db)
         channel = session.last_channel
         reply = await runtime.generate_admin_decision_reply(
             session_id=session.id,

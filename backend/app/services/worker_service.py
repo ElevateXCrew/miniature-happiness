@@ -119,9 +119,9 @@ class WorkerService:
                 executed_actions=command.executed_actions,
             )
 
-        from app.services.agent_runtime import AgentRuntimeService
+        from app.services.worker_runtime_service import WorkerRuntimeService
 
-        runtime = AgentRuntimeService(self.db)
+        runtime = WorkerRuntimeService(self.db)
         reply_result = await runtime.generate_worker_chat_reply(
             worker_id=worker_id,
             inbound_text=text,
@@ -414,9 +414,9 @@ class WorkerService:
         if session:
             channel = session[-1].channel
 
-        from app.services.agent_runtime import AgentRuntimeService
+        from app.services.worker_runtime_service import WorkerRuntimeService
 
-        runtime = AgentRuntimeService(self.db)
+        runtime = WorkerRuntimeService(self.db)
         relay_reply = await runtime.generate_worker_relay_reply(
             session_id=booking.session_id,
             client_id=client.id,

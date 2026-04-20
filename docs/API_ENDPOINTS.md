@@ -79,8 +79,8 @@ Notes:
 
 - Primary mobile path:
   - `POST /worker/messages`
-    - Relay intent is agent-mediated: worker instruction is rewritten by runtime into natural Alysha client-facing text before Twilio send.
-    - Free-form worker chat is also routed through the agent runtime so short greetings return an Alysha-style reply instead of the old canned helper text.
+    - Relay intent is agent-mediated: worker instruction is rewritten by worker runtime into natural Alysha client-facing text before Twilio send.
+    - Free-form worker chat is routed through worker runtime policy (separate from client intake runtime), so short greetings/general chat return Alysha-style worker-assistant replies.
   - `GET /events/worker/stream`
 - Optional direct action routes (kept for compatibility):
   - `GET /worker/bookings/upcoming`
@@ -94,6 +94,7 @@ Notes:
 - Worker endpoints require authenticated user role `worker` or admin override.
 - If admin disables a section, related worker endpoints must return `403`.
 - `POST /worker/messages` keeps `worker_id` in request for compatibility, and backend enforces JWT worker identity match.
+- Worker chat runtime path is isolated from Twilio/client intake runtime path.
 - Full request/response integration guide is in `docs/MOBILE_APP_API_INTEGRATION.md`.
 
 Example chat request (query intent):

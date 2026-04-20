@@ -24,6 +24,7 @@ from app.models.notification import Notification
 from app.models.worker import Worker
 from app.services.booking_service import BookingService
 from app.services.media_service import MediaService
+from app.services.worker_runtime_service import WorkerRuntimeService
 
 
 async def _setup_pending_booking(
@@ -439,6 +440,22 @@ async def test_worker_message_free_form_uses_alysha_style_reply(
     assert body["success"] is True
     assert body["assistant_reply"] == "Hi babe 😘"
     assert "I can check your next booking" not in body["assistant_reply"]
+    lowered = body["assistant_reply"].lower()
+    assert "incall" not in lowered
+    assert "outcall" not in lowered
+    assert "confirm your age" not in lowered
+
+
+@pytest.mark.asyncio
+async def test_worker_runtime_sanitizes_client_intake_prompt_from_free_chat(
+    db: AsyncSession,
+) -> None:
+    runtime = WorkerRuntimeService(db)
+    unsafe = "Would you prefer incall or outcall babe?"
+
+    safe = runtime._sanitize_worker_chat_reply(unsafe)
+
+    assert safe == "Sure babe 😊"
 
 
 @pytest.mark.asyncio

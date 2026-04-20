@@ -324,6 +324,7 @@ The system operates within a multi-way interaction environment:
 2. **Admin Live Chat Moderation:** The admin can clear a selected session’s previous conversation history from the Live Chat panel when moderation or cleanup is required.
 
 3. **Agent to Worker:** While the agent is conversing with the client on behalf of the worker, the worker can ask queries about bookings or request changes or adjustments to booking timings, through mobile APP. The AI must be aware of the worker and respond as the worker’s assistant.
+    - Implementation note: worker mobile messages route through a dedicated worker runtime facade/prompt policy, while client inbound and admin-decision client messaging route through a separate client runtime facade.
 
 4. **Agent to Client:** The agent should communicate naturally with the client.
     
@@ -448,6 +449,7 @@ This section defines what future agents should optimize for when fixing bugs in 
 
 -   Backend deterministic orchestration, Twilio channels, lifecycle, reliability hardening, JWT auth/RBAC, admin panel, worker portal, and realtime sync are already implemented.
 -   Worker mobile is chat-first: `POST /worker/messages` is the primary interaction path, with worker query/command/relay intents and free-form Alysha chat returning structured `executed_actions`.
+-   Runtime path separation is active: worker chat/relay uses worker runtime behavior, while client intake and admin-decision client updates use client runtime behavior.
 -   Worker realtime stream includes worker-targeted chat and operation events for mobile UX continuity.
 -   The project is now in stabilization and launch-governance mode, not feature-discovery mode.
 -   Any bug fix must preserve the backend state machine as source of truth.

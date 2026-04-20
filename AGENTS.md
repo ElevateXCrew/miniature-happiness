@@ -16,6 +16,7 @@
 - Twilio inbound media is now downloaded and stored under backend `media/<client_phone>/...`, and admin panel media list prefers served local copies.
 - Image-aware inbound guard is active: when media arrives, runtime receives attachment context in inbound text so Alysha can respond naturally.
 - Worker mobile chat-first execution is active: `POST /worker/messages` now supports query, command, client relay, and free-form agent chat intents with structured `executed_actions` in response.
+- Runtime facade split is now active: worker chat/relay paths use a worker runtime facade and worker prompt policy, while client inbound and admin decision messaging use a client runtime facade over shared core logic.
 - Worker realtime stream now carries worker-targeted chat and operation updates (`worker.chat_reply`, `worker.operation.completed`) plus worker-owned booking lifecycle updates.
 - Current backend verification snapshot: 62 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.

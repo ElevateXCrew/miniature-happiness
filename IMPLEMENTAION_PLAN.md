@@ -14,6 +14,7 @@ This file is the single execution source of truth for project planning.
 - Post-stabilization booking integrity guard is active: availability success now ensures a persisted draft booking is linked to session context before confirmation/review transitions.
 - Worker mobile chat-first path is active: `/worker/messages` is the primary worker interaction endpoint with deterministic intent handling, Alysha-style free-form chat replies, and `executed_actions` response traces.
 - Worker realtime visibility now includes worker-targeted chat/operation events and worker-owned booking status updates.
+- Runtime path separation is active via facades: worker mobile chat/relay uses worker runtime policy, while client inbound/admin decision messaging uses client runtime policy over shared deterministic core services.
 
 ## Scope Locks (Agreed)
 
@@ -28,6 +29,9 @@ This file is the single execution source of truth for project planning.
 - Worker mobile interaction:
   - Primary path is chat-first (`POST /worker/messages` + worker SSE stream).
   - Optional direct action routes remain supported for compatibility (`/worker/bookings/*`, `/worker/availability/*`).
+- Runtime isolation:
+  - Worker routes must use worker runtime facade methods only.
+  - Client/Twilio ingress and admin decision messaging must use client runtime facade methods only.
 - Admin live chat moderation:
   - Admin can clear prior conversation history for a specific session from the Live Chat panel.
   - Clear-history action is admin-only and audit-logged.

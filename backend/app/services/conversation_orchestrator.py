@@ -15,7 +15,7 @@ from app.repositories.idempotency_repo import IdempotencyRepository
 from app.repositories.message_repo import MessageRepository
 from app.repositories.session_repo import SessionRepository
 from app.repositories.worker_repo import WorkerRepository
-from app.services.agent_runtime import AgentRuntimeService
+from app.services.client_runtime_service import ClientRuntimeService
 from app.services.media_service import MediaService
 from app.services.notification_service import NotificationService
 from app.services.twilio_gateway import TwilioGateway
@@ -39,7 +39,7 @@ class ConversationOrchestrator:
         self.messages = MessageRepository(db)
         self.idempotency = IdempotencyRepository(db)
         self.workers = WorkerRepository(db)
-        self.runtime = AgentRuntimeService(db)
+        self.runtime = ClientRuntimeService(db)
         self.media = MediaService(db)
         self.notifications = NotificationService(db)
         self.gateway = TwilioGateway()
