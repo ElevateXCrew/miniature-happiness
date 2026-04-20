@@ -50,6 +50,7 @@ Notes:
 - `POST /admin/bookings/{booking_id}/approve`
 - `POST /admin/bookings/{booking_id}/reject`
 - `POST /admin/bookings/{booking_id}/cancel`
+  - Decision message dispatch is agent-mediated: backend sends an internal admin action instruction to runtime, and Alysha sends the client-facing 1-2 line update in prior conversation context.
 - `POST /admin/bookings/{booking_id}/incall-address-sent`
   - Marks `incall_address_sent_at` after a confirmed incall booking.
 - `PATCH /admin/bookings/{booking_id}`

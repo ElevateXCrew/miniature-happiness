@@ -5,6 +5,7 @@
 - Phases 1-6 are implemented (backend orchestration, admin panel, worker portal, RBAC, realtime).
 - Post-Phase-6 stabilization is applied (dashboard fail-soft, availability recovery, role/section consistency).
 - Availability flow persistence safeguard is active: successful availability checks now auto-link/create a draft booking for the active session, and explicit client confirmation is server-gated before review submission.
+- Admin booking decisions now route through agent runtime with conversation continuity: admin approve/reject/cancel triggers an internal agent decision instruction, and Alysha sends the client-facing decision message in-context.
 - Current backend verification snapshot: 43 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.
 

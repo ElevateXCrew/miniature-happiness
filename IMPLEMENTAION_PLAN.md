@@ -21,7 +21,7 @@ This file is the single execution source of truth for project planning.
 - Reply style: short, natural, 1-2 lines unless detail is explicitly required.
 - Booking field order: `datetime -> age (18+) -> ethnicity (mandatory) -> duration -> name (optional)`.
 - Booking decision flow:
-  - Admin approve/reject: updates booking status.
+  - Admin approve/reject: updates booking status and routes a decision instruction through agent runtime so Alysha sends the client update in continuity with prior conversation.
   - Worker approve/reject: updates booking status and syncs admin panel instantly.
 - Media behavior:
   - Media can be received and linked to client/booking.
