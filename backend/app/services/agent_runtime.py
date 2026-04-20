@@ -130,6 +130,74 @@ class AgentRuntimeService:
             inbound_text=inbound_text,
         )
 
+    async def generate_admin_decision_reply(
+        self,
+        *,
+        session_id: uuid.UUID,
+        client_id: uuid.UUID,
+        worker_id: uuid.UUID,
+        channel: Channel,
+        decision_instruction: str,
+    ) -> AgentReply:
+        """Generate an admin decision follow-up in Alysha's voice using chat context."""
+        if not settings.openai_api_key.strip():
+            admin_reply = self._admin_action_fallback_reply(decision_instruction)
+            if admin_reply is not None:
+                return admin_reply
+            return AgentReply(text="Got it babe, I'll update you shortly 😊", tool_traces=[])
+
+        try:
+            session = await self.sessions.get_by_id(session_id)
+            if session is None:
+                admin_reply = self._admin_action_fallback_reply(decision_instruction)
+                if admin_reply is not None:
+                    return admin_reply
+                return AgentReply(text="Got it babe, I'll update you shortly 😊", tool_traces=[])
+
+            booking_context = await self._build_booking_context_block(session)
+            system_prompt = self._load_channel_prompt(channel, extra_context=booking_context)
+            history = await self.messages.list_for_session(session_id)
+
+            chat_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+            for msg in history[-16:]:
+                role = "user" if msg.direction == MessageDirection.INBOUND else "assistant"
+                chat_messages.append({"role": role, "content": msg.body or ""})
+
+            chat_messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "[SYSTEM ADMIN DECISION CONTEXT] "
+                        f"{decision_instruction} "
+                        "Keep continuity with the recent conversation. "
+                        "Output only the client-facing message in 1-2 lines."
+                    ),
+                }
+            )
+            chat_messages.append(
+                {
+                    "role": "user",
+                    "content": "Send the booking decision update now.",
+                }
+            )
+
+            client = self._get_openai_client()
+            completion = await cast(Any, client.chat.completions).create(
+                model=settings.openai_model,
+                temperature=0.2,
+                messages=chat_messages,
+            )
+            content = (completion.choices[0].message.content or "").strip()
+            if content:
+                return AgentReply(text=self._ensure_short_style(content), tool_traces=[])
+        except Exception as exc:
+            logger.warning("Admin decision LLM generation failed, using fallback", error=str(exc))
+
+        admin_reply = self._admin_action_fallback_reply(decision_instruction)
+        if admin_reply is not None:
+            return admin_reply
+        return AgentReply(text="Got it babe, I'll update you shortly 😊", tool_traces=[])
+
     async def _generate_llm_reply(
         self,
         session_id: uuid.UUID,

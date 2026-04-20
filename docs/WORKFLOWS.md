@@ -12,7 +12,9 @@
 8. Summarize details and request explicit confirmation.
 9. On explicit yes, move to `PENDING_REVIEW` and notify admin + worker.
 10. Tell client to wait briefly.
-11. On approval/rejection event, notify client and finalize state.
+11. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
+12. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
+13. Finalize state and emit admin sync events.
 
 ## 2) Outcall Flow with Advance and Receipt
 

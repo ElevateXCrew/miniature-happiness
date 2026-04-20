@@ -303,7 +303,7 @@ The system operates within a multi-way interaction environment:
     
 4.  **The Client:** The person inquiring about services and making bookings.
 ### 2) Relation of three entities with Agent
-1. **Agent to Admin:** When admin confirm or cancel any booking from the control panel, a message will send to the agent about the about the status (Accepted or Rejected). Than the agent will give response to that client about the on reviewing booking. Also, the admin can edit the booking status.
+1. **Agent to Admin:** When admin confirms, rejects, or cancels a booking from the control panel, backend sends an internal status instruction to the agent runtime. Alysha then sends the client decision update in 1-2 lines, aligned with the recent conversation context. Admin can still edit booking status from the panel.
 2. . **Agent to Worker:** As the agent is conversing with client on behalf of the worker, the worker can ask any query about the bookings, ask agent for changing or adjusting booking timing. The AI must aware about the worker and repose like an assistant of the worker.
 3. **Agent to Client:** The agent should converse naturally with the client.
     

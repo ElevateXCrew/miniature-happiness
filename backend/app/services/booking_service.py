@@ -425,6 +425,65 @@ class BookingService:
             session.active_booking_id = None
             await self.session_repo.update_state(session, new_state)
 
+    async def _build_agent_decision_instruction(self, booking: Any, status: BookingStatus) -> str:
+        """Build a high-signal system instruction for admin booking decisions."""
+        if booking.scheduled_start_at:
+            try:
+                start_label = booking.scheduled_start_at.astimezone(UTC).strftime(
+                    "%A %d %B at %H:%M"
+                )
+            except Exception:
+                start_label = str(booking.scheduled_start_at)
+        else:
+            start_label = "the booking"
+
+        history = await MessageRepository(self.db).list_for_session(booking.session_id)
+        recent_client_text = ""
+        for msg in reversed(history):
+            if (
+                msg.direction == MessageDirection.INBOUND
+                and msg.sender_type == SenderType.CLIENT
+                and (msg.body or "").strip()
+            ):
+                recent_client_text = (msg.body or "").strip()
+                break
+
+        if len(recent_client_text) > 240:
+            recent_client_text = f"{recent_client_text[:237]}..."
+
+        if status == BookingStatus.CONFIRMED:
+            decision_guidance = (
+                f"The booking for {start_label} is now confirmed. "
+                "Sound warm, positive, and natural."
+            )
+            decision_tag = "confirmed"
+        elif status == BookingStatus.REJECTED:
+            decision_guidance = (
+                f"The booking for {start_label} is not available. "
+                "Apologise warmly and invite a different time."
+            )
+            decision_tag = "rejected"
+        else:
+            decision_guidance = (
+                f"The booking for {start_label} was cancelled. "
+                "Be clear and caring, and invite rebooking when they want."
+            )
+            decision_tag = "cancelled"
+
+        context_hint = ""
+        if recent_client_text:
+            context_hint = (
+                " Keep continuity with the client's recent wording and tone. "
+                f"Recent client message: \"{recent_client_text}\"."
+            )
+
+        return (
+            f"[ADMIN ACTION: booking {decision_tag}] "
+            f"{decision_guidance}{context_hint} "
+            "Write only the outbound client message in Alysha's voice. "
+            "Do not mention admin actions or internal steps. 1-2 lines max."
+        )
+
     async def send_client_decision_message(self, booking: Any, status: BookingStatus) -> None:
         if status not in {BookingStatus.CONFIRMED, BookingStatus.REJECTED, BookingStatus.CANCELLED}:
             return
@@ -436,39 +495,10 @@ class BookingService:
         session = await self.session_repo.get_by_id(booking.session_id)
         if session is None or session.last_channel is None:
             return
+        admin_instruction = await self._build_agent_decision_instruction(booking, status)
 
-        # Build a scheduled datetime label for use in the admin instruction.
-        if booking.scheduled_start_at:
-            try:
-                start_label = booking.scheduled_start_at.astimezone(
-                    UTC
-                ).strftime("%A %d %B at %H:%M")
-            except Exception:
-                start_label = str(booking.scheduled_start_at)
-        else:
-            start_label = "the booking"
-
-        if status == BookingStatus.CONFIRMED:
-            admin_instruction = (
-                f"[ADMIN ACTION: booking confirmed] "
-                f"Tell the client their booking for {start_label} is confirmed. "
-                f"Sound warm and excited. 1-2 lines max."
-            )
-        elif status == BookingStatus.REJECTED:
-            admin_instruction = (
-                f"[ADMIN ACTION: booking rejected] "
-                f"Apologise warmly that {start_label} isn't available. "
-                f"Invite them to suggest a different time. 1-2 lines max."
-            )
-        else:
-            admin_instruction = (
-                f"[ADMIN ACTION: booking cancelled] "
-                f"Let the client know {start_label} has been cancelled. "
-                f"Invite them to get back in touch to rebook. 1-2 lines max."
-            )
-
-        # Feed the admin instruction through the full LLM pipeline so Alysha
-        # produces the reply in her own voice rather than sending the raw directive.
+        # Route admin decisions through a dedicated runtime path so Alysha's
+        # message stays consistent with the previous conversation context.
         # Import here to avoid circular dependency (booking_service <-> agent_runtime).
         from app.services.agent_runtime import AgentRuntimeService
         from app.services.twilio_gateway import TwilioGateway
@@ -483,13 +513,12 @@ class BookingService:
 
         runtime = AgentRuntimeService(self.db)
         channel = session.last_channel
-        reply = await runtime.generate_reply(
+        reply = await runtime.generate_admin_decision_reply(
             session_id=session.id,
             client_id=client.id,
             worker_id=worker.id,
             channel=channel,
-            inbound_text=admin_instruction,
-            attached_media_count=0,
+            decision_instruction=admin_instruction,
         )
 
         gateway = TwilioGateway()

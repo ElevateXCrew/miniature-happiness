@@ -162,6 +162,29 @@ async def test_admin_approve_sends_client_decision_and_notification(
 
 
 @pytest.mark.asyncio
+async def test_admin_decision_instruction_keeps_recent_client_context(db: AsyncSession) -> None:
+    _, _, session, booking = await _setup_pending_booking(db)
+
+    inbound = Message(
+        session_id=session.id,
+        direction=MessageDirection.INBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.CLIENT,
+        body="Perfect babe, can you confirm this exact time for me?",
+    )
+    db.add(inbound)
+    await db.flush()
+
+    svc = BookingService(db)
+    instruction = await svc._build_agent_decision_instruction(booking, BookingStatus.CONFIRMED)
+
+    assert "[ADMIN ACTION: booking confirmed]" in instruction
+    assert "Recent client message" in instruction
+    assert "Perfect babe, can you confirm this exact time for me?" in instruction
+    assert "Do not mention admin actions" in instruction
+
+
+@pytest.mark.asyncio
 async def test_worker_booking_actions_enforce_ownership(
     client: AsyncClient, db: AsyncSession
 ) -> None:
