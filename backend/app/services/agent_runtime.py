@@ -287,7 +287,14 @@ class AgentRuntimeService:
                         args = json.loads(tc.function.arguments or "{}")
                     except json.JSONDecodeError:
                         args = {}
-                    result = await self._execute_tool(name, args, client_id, worker_id, channel)
+                    result = await self._execute_tool(
+                        name,
+                        args,
+                        client_id,
+                        worker_id,
+                        channel,
+                        inbound_text=inbound_text,
+                    )
                     tool_traces.append({"name": name, "arguments": args, "result": result})
 
                     if (
@@ -318,9 +325,10 @@ class AgentRuntimeService:
                     next_step = result.get("next_step", "")
                     directive = (
                         "[SYSTEM — internal only, never quote this to the client] "
-                        f"Field saved successfully. {next_step} "
-                        "Stay in character as Alysha. Keep your reply to 1–2 lines. "
-                        "Do NOT say 'thank you' or acknowledge the save — just move on naturally."
+                        f"Got that, got that. {next_step} "
+                        "Stay warm and in character as Alysha. Keep your reply to 1–2 lines. "
+                        "Do NOT say 'thank you', 'got it', or acknowledge the save. "
+                        "Just ask the next question naturally."
                     )
                     chat_messages.append({"role": "system", "content": directive})
                 continue
@@ -390,7 +398,10 @@ class AgentRuntimeService:
 
         if booking_after_submit and booking_after_submit.status == BookingStatus.PENDING_REVIEW:
             return AgentReply(
-                text="Perfect babe, I've sent it for review. Please wait a moment.",
+                text=(
+                    "Perfect babe, I'm just finalizing everything. "
+                    "I'll message you in a moment 😊"
+                ),
                 tool_traces=[],
             )
         return None
@@ -419,6 +430,7 @@ class AgentRuntimeService:
         client_id: uuid.UUID,
         worker_id: uuid.UUID,
         channel: Channel,
+        inbound_text: str | None = None,
     ) -> dict[str, Any]:
         method = getattr(self.tool_runner, name, None)
         if method is None:
@@ -471,6 +483,15 @@ class AgentRuntimeService:
                     }
                 patch_args["booking_id"] = str(resolved_id)
 
+        if name == "update_booking_field":
+            guard_error = await self._guard_update_field_from_inbound(
+                patch_args=patch_args,
+                inbound_text=inbound_text or "",
+            )
+            if guard_error is not None:
+                metrics.incr("tool_calls_failed_total")
+                return {"ok": False, "error": guard_error}
+
         try:
             result = await method(**patch_args)
         except Exception as exc:
@@ -507,6 +528,115 @@ class AgentRuntimeService:
         if isinstance(result, dict):
             return cast(dict[str, Any], result)
         return {"ok": False, "error": "Tool returned invalid response type."}
+
+    async def _guard_update_field_from_inbound(
+        self,
+        *,
+        patch_args: dict[str, Any],
+        inbound_text: str,
+    ) -> str | None:
+        """
+        Block model hallucinations by allowing booking field updates only when:
+        1) the field is the next required collection field, and
+        2) the client's current inbound text supports that value.
+        """
+        booking_id_raw = str(patch_args.get("booking_id", "")).strip()
+        field_name = str(patch_args.get("field_name", "")).strip()
+        field_value = patch_args.get("field_value")
+        if not booking_id_raw or not field_name:
+            return "booking_id and field_name are required."
+
+        try:
+            booking_id = uuid.UUID(booking_id_raw)
+        except ValueError:
+            return "Invalid booking_id."
+
+        booking = await self.bookings.get_by_id(booking_id)
+        if booking is None:
+            return "Booking not found."
+
+        strict_fields = {
+            "scheduled_start_at",
+            "booking_type",
+            "duration_minutes",
+            "outcall_address",
+            "client_age",
+            "client_ethnicity",
+            "client_size_inches",
+            "alone_policy_confirmed",
+        }
+        if field_name in strict_fields:
+            expected_next = self.booking_service.get_next_required_field(booking)
+            if expected_next is not None and field_name != expected_next:
+                return (
+                    "Do not save this field yet. "
+                    f"Collect '{expected_next}' next in order."
+                )
+
+        text = (inbound_text or "").strip().lower()
+        value_text = str(field_value).strip().lower()
+        if not text:
+            return "No inbound text provided for field validation."
+
+        if field_name == "booking_type":
+            extracted = self._extract_booking_type(inbound_text)
+            if extracted is None or extracted.value != value_text:
+                return "Booking type must come from the client's current message."
+
+        if field_name == "duration_minutes":
+            extracted_minutes = self._extract_duration_minutes(inbound_text)
+            try:
+                requested_minutes = int(field_value)
+            except (TypeError, ValueError):
+                return "Invalid duration value."
+            if extracted_minutes is None or extracted_minutes != requested_minutes:
+                return "Duration must match what the client just said."
+
+        if field_name == "client_age":
+            age_cues = ("age", "old", "year", "years", "i am", "i'm")
+            extracted_age = self._extract_age(inbound_text)
+            try:
+                requested_age = int(field_value)
+            except (TypeError, ValueError):
+                return "Invalid age value."
+            if extracted_age is None or extracted_age != requested_age:
+                return "Age must match the client's current message."
+            if not any(cue in text for cue in age_cues):
+                return "Do not infer age without an explicit age statement."
+
+        if field_name == "client_ethnicity":
+            if value_text and value_text not in text:
+                return "Ethnicity must come from the client's current message."
+
+        if field_name == "outcall_address":
+            if value_text and value_text not in text:
+                return "Outcall address must come from the client's current message."
+
+        if field_name == "client_size_inches":
+            extracted_size = self._extract_size_inches(inbound_text)
+            try:
+                requested_size = int(field_value)
+            except (TypeError, ValueError):
+                return "Invalid size value."
+            if extracted_size is None or extracted_size != requested_size:
+                return "Size must match the client's current message."
+
+        if field_name == "alone_policy_confirmed":
+            extracted_policy = self._extract_alone_policy(inbound_text)
+            if isinstance(field_value, str):
+                normalized = field_value.strip().lower()
+                if normalized in {"yes", "y", "true", "1"}:
+                    requested_policy = True
+                elif normalized in {"no", "n", "false", "0"}:
+                    requested_policy = False
+                else:
+                    return "Invalid alone policy value."
+            else:
+                requested_policy = bool(field_value)
+            if extracted_policy is None or extracted_policy != requested_policy:
+                return "One-on-one confirmation must come from the client's current message."
+
+        return None
 
     async def _ensure_draft_booking_after_availability(
         self,
@@ -719,13 +849,16 @@ class AgentRuntimeService:
 
     def _next_question_for_booking(self, booking: Booking) -> str:
         if booking.booking_type is None:
-            return "Would you prefer incall or outcall, babe?"
+            return (
+                "Babe I need a few details to confirm booking, if you do not mind. "
+                "Would you prefer incall or outcall?"
+            )
 
         next_field = self.booking_service.get_next_required_field(booking)
         if next_field is not None:
             return self._question_for_field(next_field)
 
-        return "Reply yes to confirm and I'll send it for review, babe."
+        return "Perfect babe, let me send your confirmation details now 😊"
 
     def _parse_tool_datetime(self, value: Any) -> datetime | None:
         if not isinstance(value, str):
@@ -789,7 +922,10 @@ class AgentRuntimeService:
                     return AgentReply(text=errors[0], tool_traces=[])
                 if booking and booking.status == BookingStatus.PENDING_REVIEW:
                     return AgentReply(
-                        text="Perfect babe, I've sent it for review. Please wait a moment.",
+                        text=(
+                            "Perfect babe, your booking is in progress "
+                            "and I will message you shortly 😊"
+                        ),
                         tool_traces=[],
                     )
 
@@ -844,11 +980,20 @@ class AgentRuntimeService:
             )
 
         scheduled_label = booking.scheduled_start_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
-        summary = (
-            f"Just to confirm: {scheduled_label}, {booking.duration_minutes} mins, "
-            f"age {booking.client_age}, ethnicity {booking.client_ethnicity}. "
-            "Reply yes to confirm."
-        )
+        booking_type = (booking.booking_type.value.upper() if booking.booking_type else "BOOKING")
+        summary_parts = [
+            (
+                f"Just to confirm babe - {booking_type} on {scheduled_label} for "
+                f"{booking.duration_minutes} mins."
+            )
+        ]
+        if booking.booking_type == BookingType.INCALL:
+            summary_parts.append("Address: City Centre, Birmingham B16 8FP.")
+        elif booking.booking_type == BookingType.OUTCALL:
+            summary_parts.append("For outcall it's rate + Uber and a 50 GBP advance.")
+            if booking.outcall_address:
+                summary_parts.append(f"Your address: {booking.outcall_address}.")
+        summary = " ".join(summary_parts)
         session.state = ConversationState.AWAITING_CLIENT_CONFIRMATION
         await self.sessions.update(session)
         return AgentReply(text=summary, tool_traces=[])
@@ -919,17 +1064,66 @@ class AgentRuntimeService:
             _, errors = await self.booking_service.update_field(booking_id, field_name, duration)
             return errors[0] if errors else None
 
+        if field_name == "booking_type":
+            booking_type = self._extract_booking_type(text)
+            if booking_type is None:
+                return "Would you prefer incall or outcall, babe?"
+            _, errors = await self.booking_service.update_field(
+                booking_id,
+                field_name,
+                booking_type.value,
+            )
+            return errors[0] if errors else None
+
+        if field_name == "outcall_address":
+            value = text.strip()
+            if len(value) < 4:
+                return "Share your area or full address for outcall babe."
+            _, errors = await self.booking_service.update_field(booking_id, field_name, value)
+            return errors[0] if errors else None
+
+        if field_name == "client_size_inches":
+            size_inches = self._extract_size_inches(text)
+            if size_inches is None:
+                return "One more thing babe - what size are you?"
+            _, errors = await self.booking_service.update_field(booking_id, field_name, size_inches)
+            return errors[0] if errors else None
+
+        if field_name == "alone_policy_confirmed":
+            alone_value = self._extract_alone_policy(text)
+            if alone_value is None:
+                return "It'll just be you, right babe? I only do one-on-one."
+            _, errors = await self.booking_service.update_field(
+                booking_id,
+                field_name,
+                alone_value,
+            )
+            return errors[0] if errors else None
+
         return None
 
     def _question_for_field(self, field_name: str) -> str:
         if field_name == "scheduled_start_at":
             return "What date and time do you want babe?"
+        if field_name == "booking_type":
+            return (
+                "Babe I need a few details to confirm booking, if you do not mind. "
+                "Would you prefer incall or outcall?"
+            )
+        if field_name == "outcall_address":
+            return "Share your area or address for outcall babe."
+        if field_name == "client_name":
+            return "What's your name babe?"
         if field_name == "client_age":
             return "Confirm your age for me please (18+)."
         if field_name == "client_ethnicity":
             return "What ethnicity are you babe?"
         if field_name == "duration_minutes":
             return "How long do you want to book for?"
+        if field_name == "client_size_inches":
+            return "One more thing babe - what size are you?"
+        if field_name == "alone_policy_confirmed":
+            return "It'll just be you, right babe? I only do one-on-one."
         return "Can you share that detail for me?"
 
     def _extract_datetime(self, text: str) -> datetime | None:
@@ -958,6 +1152,35 @@ class AgentRuntimeService:
         min_match = re.search(r"\b(\d{2,3})\s*(min|mins|minute|minutes)?\b", lower)
         if min_match:
             return int(min_match.group(1))
+        return None
+
+    def _extract_size_inches(self, text: str) -> int | None:
+        match = re.search(r"\b(\d{1,2})\b", text)
+        if not match:
+            return None
+        return int(match.group(1))
+
+    def _extract_alone_policy(self, text: str) -> bool | None:
+        lowered = text.strip().lower()
+        negative_tokens = ("no", "not alone", "friend", "friends", "we", "two", "group")
+        positive_tokens = (
+            "yes",
+            "y",
+            "ok",
+            "okay",
+            "fine",
+            "that's fine",
+            "thats fine",
+            "sure",
+            "alone",
+            "just me",
+            "only me",
+        )
+
+        if any(token in lowered for token in negative_tokens):
+            return False
+        if any(token in lowered for token in positive_tokens):
+            return True
         return None
 
     def _load_channel_prompt(self, channel: Channel, extra_context: str | None = None) -> str:
@@ -1038,27 +1261,47 @@ class AgentRuntimeService:
             if booking.client_ethnicity
             else "  Client ethnicity: NOT YET PROVIDED"
         )
+        size_line = (
+            f"  Client size: {booking.client_size_inches} inches"
+            if booking.client_size_inches is not None
+            else "  Client size: NOT YET PROVIDED"
+        )
+        alone_policy_line = (
+            "  Alone policy: Confirmed — just them"
+            if booking.alone_policy_confirmed is True
+            else (
+                "  Alone policy: Declined — not alone"
+                if booking.alone_policy_confirmed is False
+                else "  Alone policy: NOT YET ASKED"
+            )
+        )
         records = [
             f"  booking_id (use this exact value for tool calls): {booking.id}",
-            "  Collection status: in progress",
             f"  Date & time: {fmt_dt(booking.scheduled_start_at)}",
             f"  Booking type: {booking_type_label}",
             dur_line,
             name_line,
             age_line,
             eth_line,
+            size_line,
+            alone_policy_line,
         ]
 
         lines.append("[Your booking records for this client]:")
         lines.extend(records)
         collection_order = (
-            "date/time -> booking type -> duration -> name (optional)"
-            " -> age -> ethnicity -> size -> alone policy -> confirmation"
+            "DATE -> BOOKING TYPE -> DURATION -> NAME (optional) -> AGE -> "
+            "ETHNICITY -> SIZE -> ALONE POLICY -> FINAL CONFIRMATION"
         )
         lines.append(
-            "\nIMPORTANT: NEVER ask for a field that already has a value above. "
-            "Move directly to the next NOT YET PROVIDED field in the collection order: "
-            + collection_order + "."
+            "\nSTAY IN CHARACTER: You are Alysha (real person, not a bot). "
+            "Never mention checking, validation, collection, or system terms."
+            "\n✓ FIELD ORDER: Ask fields in this exact order: " + collection_order + "."
+            "\n✓ SKIP FIELDS: NEVER ask for a field that already shows a value above."
+            "\n✓ AFTER ALL FIELDS COLLECTED: Send a warm confirmation summary with all "
+            "details. Do not ask 'shall I proceed?'; send confirmation and wait for YES."
+            "\n✓ INCALL ADDRESS: Do not share the incall address until sending the "
+            "final confirmation message."
         )
         return "\n".join(lines)
 

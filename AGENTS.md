@@ -8,6 +8,10 @@
 - Admin booking decisions now route through agent runtime with conversation continuity: admin approve/reject/cancel triggers an internal agent decision instruction, and Alysha sends the client-facing decision message in-context.
 - Admin Live Chat now supports explicit conversation-history clearing per session via admin-only action, with audit logging.
 - Collection anti-repeat guard is improved: runtime now pre-captures the next required field from inbound text before LLM generation to reduce duplicate re-asking.
+- Collection anti-hallucination guard is active: runtime now blocks out-of-order or unsupported `update_booking_field` saves unless the value is present in the current client inbound text.
+- One-on-one confirmation parsing now accepts short confirmations like `ok/okay/fine` to avoid repeated alone-policy re-asks.
+- Collection tone hardening is active: booking collection starts with a soft consent line before ordered questions.
+- Incall address timing rule is enforced: address is shared in final confirmation summary, not immediately after incall selection.
 - Current backend verification snapshot: 43 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.
 
@@ -24,7 +28,7 @@
 ## Non-Negotiables
 
 - Assistant always represents `Alysha` and stays concise (1-2 lines unless summary required).
-- Booking field order remains: `datetime -> age(18+) -> ethnicity(mandatory) -> duration -> name(optional)`.
+- Booking field order remains: `datetime -> booking_type -> duration -> outcall_address(if outcall) -> age(18+) -> ethnicity(mandatory) -> size -> alone_policy -> final confirmation`.
 - Backend state machine is source of truth; do not move logic into prompts/UI.
 - Client identity is canonical by `clients.phone_e164`.
 - RBAC has only two roles: `admin`, `worker`.

@@ -153,16 +153,39 @@ class ToolRunner:
         # rather than stopping with an acknowledgement like "Thank you".
         next_field = svc.get_next_required_field(booking) if booking else None
         _FIELD_QUESTION: dict[str, str] = {
-            "scheduled_start_at": "Ask for booking type (incall or outcall).",
-            "client_age": "Ask for the client's ethnicity.",
-            "client_ethnicity": "Ask for the duration.",
-            "duration_minutes": "Ask for the client's name (optional, they can skip).",
-            "client_name": "Ask for the client's age.",
+            # Step 1 → Step 2: After date/time, ask booking type
+            "scheduled_start_at": (
+                "Start gently: 'Babe I need a few details to confirm booking, if you do not mind.' "
+                "Then ask booking type (incall or outcall)."
+            ),
+            # Step 2 → Step 3: After booking type, ask duration
+            "booking_type": "Ask for the duration they want.",
+            # Step 3 → Step 4 (if outcall) or Step 5 (if incall): Ask for address (outcall only)
+            "outcall_address": "Ask for their address or area.",
+            # Step 3 or 4 → Step 5: Ask for name (optional, can skip)
+            "duration_minutes": "Ask for their name (optional, they can skip).",
+            # Step 5 → Step 6: After name, ask age
+            "client_name": "Ask for their age.",
+            # Step 6 → Step 7: After age, ask ethnicity
+            "client_age": "Ask for their ethnicity.",
+            # Step 7 → Step 7b: After ethnicity, ask size
+            "client_ethnicity": "Ask for their size.",
+            # Step 7b → Step 8: After size, ask about alone policy
+            "client_size_inches": "Ask if they'll be alone (you only do one-on-one).",
+            # Step 8 → Final confirmation: All fields done, send confirmation summary
+            "alone_policy_confirmed": (
+                "All required fields are now collected. "
+                "Send a warm confirmation summary with all booking details. "
+                "Do NOT ask 'shall I proceed?'. "
+                "Present the confirmation and wait for their YES."
+            ),
         }
         if next_field is None:
             next_instruction = (
                 "All required fields are now collected. "
-                "Present a full booking summary and ask the client to confirm."
+                "Send a warm confirmation summary with all booking details. "
+                "Do NOT ask 'shall I proceed?'. "
+                "Present the confirmation and wait for their YES."
             )
         else:
             next_instruction = _FIELD_QUESTION.get(

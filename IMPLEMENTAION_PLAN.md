@@ -19,7 +19,7 @@ This file is the single execution source of truth for project planning.
 - Channels: SMS and WhatsApp with separate system instructions.
 - Persona: assistant always speaks as Alysha; never as "an AI assistant".
 - Reply style: short, natural, 1-2 lines unless detail is explicitly required.
-- Booking field order: `datetime -> age (18+) -> ethnicity (mandatory) -> duration -> name (optional)`.
+- Booking field order: `datetime -> booking_type -> duration -> outcall_address(if outcall) -> age(18+) -> ethnicity(mandatory) -> size -> alone_policy -> final confirmation`.
 - Booking decision flow:
   - Admin approve/reject: updates booking status and routes a decision instruction through agent runtime so Alysha sends the client update in continuity with prior conversation.
   - Worker approve/reject: updates booking status and syncs admin panel instantly.
@@ -28,6 +28,9 @@ This file is the single execution source of truth for project planning.
   - Clear-history action is admin-only and audit-logged.
 - Conversation collection reliability:
   - Runtime pre-captures the next required booking field from inbound text before LLM generation to reduce repeated question loops.
+  - Runtime blocks hallucinated/out-of-order booking field updates unless the value is supported by the current inbound text.
+  - One-on-one confirmations accept short replies like `ok/okay/fine` to avoid repeated prompts.
+  - Incall address is sent at final confirmation stage (not immediately after booking type selection).
 - Media behavior:
   - Media can be received and linked to client/booking.
   - If client is on SMS and media is needed, ask to send media on WhatsApp using same number.

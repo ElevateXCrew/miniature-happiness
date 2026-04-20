@@ -39,6 +39,9 @@ Notes:
   - Returns `duplicate` and `replayed` flags for idempotent/replay-safe inbound handling.
   - Enforces deterministic booking persistence guards: successful availability checks ensure a draft booking is linked to the active session, and explicit client confirmation cannot progress without a persisted draft.
   - Applies deterministic pre-capture for the next required booking field from inbound text before LLM generation to reduce repeated follow-up questions.
+  - Applies anti-hallucination guards for booking collection: tool updates are rejected when a field is out-of-order or value is not supported by current inbound client text.
+  - One-on-one confirmation parser accepts short positive replies (`ok`, `okay`, `fine`) to prevent repeated re-asking.
+  - Incall address is shared at final confirmation summary stage, not immediately after incall selection.
 - `POST /agent/send-message`
   - Internal endpoint for deterministic outbound dispatch.
 
