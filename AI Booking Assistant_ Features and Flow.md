@@ -323,7 +323,7 @@ The system operates within a multi-way interaction environment:
 
 2. **Admin Live Chat Moderation:** The admin can clear a selected session’s previous conversation history from the Live Chat panel when moderation or cleanup is required.
 
-3. **Agent to Worker:** While the agent is conversing with the client on behalf of the worker, the worker can ask queries about bookings or request changes or adjustments to booking timings. The AI must be aware of the worker and respond as the worker’s assistant.
+3. **Agent to Worker:** While the agent is conversing with the client on behalf of the worker, the worker can ask queries about bookings or request changes or adjustments to booking timings, through mobile APP. The AI must be aware of the worker and respond as the worker’s assistant.
 
 4. **Agent to Client:** The agent should communicate naturally with the client.
     
