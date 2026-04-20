@@ -235,6 +235,16 @@
   padding: var(--space-8) 0;
 }
 
+.chatError {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger, #ef4444) 20%, transparent);
+  color: var(--color-danger, #ef4444);
+  font-size: 0.75rem;
+}
+
 /* Bubbles */
 .bubble {
   max-width: 85%;

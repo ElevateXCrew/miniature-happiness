@@ -304,8 +304,9 @@ The system operates within a multi-way interaction environment:
 4.  **The Client:** The person inquiring about services and making bookings.
 ### 2) Relation of three entities with Agent
 1. **Agent to Admin:** When admin confirms, rejects, or cancels a booking from the control panel, backend sends an internal status instruction to the agent runtime. Alysha then sends the client decision update in 1-2 lines, aligned with the recent conversation context. Admin can still edit booking status from the panel.
-2. . **Agent to Worker:** As the agent is conversing with client on behalf of the worker, the worker can ask any query about the bookings, ask agent for changing or adjusting booking timing. The AI must aware about the worker and repose like an assistant of the worker.
-3. **Agent to Client:** The agent should converse naturally with the client.
+2. **Admin Live Chat Moderation:** Admin can clear a selected session's previous conversation history from the Live Chat panel when moderation or cleanup is required.
+3. . **Agent to Worker:** As the agent is conversing with client on behalf of the worker, the worker can ask any query about the bookings, ask agent for changing or adjusting booking timing. The AI must aware about the worker and repose like an assistant of the worker.
+4. **Agent to Client:** The agent should converse naturally with the client.
     
 
 ## 2) Deterministic Control Philosophy
@@ -315,6 +316,7 @@ To ensure 100% reliability, the "brain" of the operation is split:
 -   **The Agent (LLM):** Solely responsible for **Natural Language Understanding (NLU)** and **Generation**. It extracts details (like time, duration, or age) and passes them to the backend via tool calls.
     
 -   **The Backend (State Machine):** The "Source of Truth." It validates data, checks for conflicts, enforces the 15-minute gap rule, and moves bookings through their lifecycle.
+-   **Deterministic Pre-Capture:** Before LLM generation, backend attempts to capture the next required booking field directly from inbound text so the assistant does not re-ask the same question after the client has already answered.
     
 -   **No Hallucinations:** The Agent never "decides" a booking is confirmed. It only reports what the backend state allows it to say.
     

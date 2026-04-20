@@ -94,6 +94,11 @@ export const sessionsApi = {
   getMessages: (sessionId: string) =>
     api.get<SessionMessage[]>(`/admin/sessions/${sessionId}/messages`),
 
+  clearMessages: (sessionId: string) =>
+    api.delete<{ session_id: string; deleted_count: number }>(
+      `/admin/sessions/${sessionId}/messages`,
+    ),
+
   pause: () => api.post<{ paused: boolean }>('/admin/agent/pause'),
 
   resume: () => api.post<{ resumed: boolean }>('/admin/agent/resume'),

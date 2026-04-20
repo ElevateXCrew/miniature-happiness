@@ -23,6 +23,11 @@ This file is the single execution source of truth for project planning.
 - Booking decision flow:
   - Admin approve/reject: updates booking status and routes a decision instruction through agent runtime so Alysha sends the client update in continuity with prior conversation.
   - Worker approve/reject: updates booking status and syncs admin panel instantly.
+- Admin live chat moderation:
+  - Admin can clear prior conversation history for a specific session from the Live Chat panel.
+  - Clear-history action is admin-only and audit-logged.
+- Conversation collection reliability:
+  - Runtime pre-captures the next required booking field from inbound text before LLM generation to reduce repeated question loops.
 - Media behavior:
   - Media can be received and linked to client/booking.
   - If client is on SMS and media is needed, ask to send media on WhatsApp using same number.

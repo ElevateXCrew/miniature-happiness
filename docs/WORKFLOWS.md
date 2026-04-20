@@ -7,14 +7,15 @@
 3. Agent sends short natural response (Alysha persona).
 4. On booking intent, create/update draft booking.
 5. Collect required fields in strict order.
-6. Run availability tool before confirming proposed slot.
-7. Persist/link a draft booking to the active session when availability succeeds (deterministic guard).
-8. Summarize details and request explicit confirmation.
-9. On explicit yes, move to `PENDING_REVIEW` and notify admin + worker.
-10. Tell client to wait briefly.
-11. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
-12. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
-13. Finalize state and emit admin sync events.
+6. Before LLM generation, runtime pre-captures the next required field from inbound text when possible.
+7. Run availability tool before confirming proposed slot.
+8. Persist/link a draft booking to the active session when availability succeeds (deterministic guard).
+9. Summarize details and request explicit confirmation.
+10. On explicit yes, move to `PENDING_REVIEW` and notify admin + worker.
+11. Tell client to wait briefly.
+12. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
+13. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
+14. Finalize state and emit admin sync events.
 
 ## 2) Outcall Flow with Advance and Receipt
 
@@ -73,7 +74,15 @@
 3. Failed widget shows inline error state and retry action.
 4. Operators can continue core review actions without full-page failure.
 
-## 9) Availability Error Recovery
+## 9) Admin Live Chat History Clear
+
+1. Admin opens Live Chat and selects a session.
+2. Admin clicks Delete History and confirms the destructive action.
+3. Backend clears `messages` rows for that session via admin-only endpoint.
+4. Backend writes audit event `messages.cleared` with deleted message count.
+5. Chat panel refreshes to an empty history state for that session.
+
+## 10) Availability Error Recovery
 
 1. Agent/tool receives malformed or ambiguous datetime input.
 2. Backend returns deterministic validation error (no unhandled exception path).

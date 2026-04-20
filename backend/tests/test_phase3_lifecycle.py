@@ -185,6 +185,44 @@ async def test_admin_decision_instruction_keeps_recent_client_context(db: AsyncS
 
 
 @pytest.mark.asyncio
+async def test_admin_can_clear_session_messages(client: AsyncClient, db: AsyncSession) -> None:
+    _, _, session, _ = await _setup_pending_booking(db)
+
+    db.add_all(
+        [
+            Message(
+                session_id=session.id,
+                direction=MessageDirection.INBOUND,
+                channel=Channel.WHATSAPP,
+                sender_type=SenderType.CLIENT,
+                body="Hello",
+            ),
+            Message(
+                session_id=session.id,
+                direction=MessageDirection.OUTBOUND,
+                channel=Channel.WHATSAPP,
+                sender_type=SenderType.AGENT,
+                body="Hey babe 😘",
+            ),
+        ]
+    )
+    await db.flush()
+
+    before = await client.get(f"/admin/sessions/{session.id}/messages")
+    assert before.status_code == 200
+    assert len(before.json()) >= 2
+
+    clear_res = await client.delete(f"/admin/sessions/{session.id}/messages")
+    assert clear_res.status_code == 200
+    assert clear_res.json()["session_id"] == str(session.id)
+    assert clear_res.json()["deleted_count"] >= 2
+
+    after = await client.get(f"/admin/sessions/{session.id}/messages")
+    assert after.status_code == 200
+    assert after.json() == []
+
+
+@pytest.mark.asyncio
 async def test_worker_booking_actions_enforce_ownership(
     client: AsyncClient, db: AsyncSession
 ) -> None:
