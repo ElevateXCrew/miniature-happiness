@@ -219,6 +219,10 @@ class AgentRuntimeService:
             return AgentReply(text="Hi babe 😘", tool_traces=[])
 
         await self._sync_draft_from_inbound(session_id=session_id, inbound_text=inbound_text)
+        await self._pre_capture_required_field_from_inbound(
+            session_id=session_id,
+            inbound_text=inbound_text,
+        )
 
         status_guard = await self._handle_active_booking_status_guard(session)
         if status_guard is not None:
@@ -564,6 +568,37 @@ class AgentRuntimeService:
                 field_value=booking_type.value,
                 actor_type=ActorType.AGENT,
             )
+
+    async def _pre_capture_required_field_from_inbound(
+        self,
+        *,
+        session_id: uuid.UUID,
+        inbound_text: str,
+    ) -> None:
+        """
+        Capture the next required field directly from inbound text before the
+        LLM call so the model does not re-ask a question that the client just
+        answered in the same turn.
+        """
+        session = await self.sessions.get_by_id(session_id)
+        if session is None or session.active_booking_id is None:
+            return
+
+        booking = await self.bookings.get_by_id(session.active_booking_id)
+        if booking is None or booking.status != BookingStatus.DRAFT:
+            return
+
+        next_field = self.booking_service.get_next_required_field(booking)
+        if next_field is None:
+            return
+
+        # Best-effort only: ignore parse/validation failures and let normal
+        # LLM+tool flow continue if no deterministic capture is possible.
+        _ = await self._attempt_field_capture(
+            booking_id=booking.id,
+            field_name=next_field,
+            text=inbound_text.strip(),
+        )
 
     async def _handle_active_booking_status_guard(
         self,

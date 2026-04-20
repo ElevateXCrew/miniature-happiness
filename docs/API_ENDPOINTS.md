@@ -38,6 +38,7 @@ Notes:
   - Internal endpoint for normalized inbound events.
   - Returns `duplicate` and `replayed` flags for idempotent/replay-safe inbound handling.
   - Enforces deterministic booking persistence guards: successful availability checks ensure a draft booking is linked to the active session, and explicit client confirmation cannot progress without a persisted draft.
+  - Applies deterministic pre-capture for the next required booking field from inbound text before LLM generation to reduce repeated follow-up questions.
 - `POST /agent/send-message`
   - Internal endpoint for deterministic outbound dispatch.
 
@@ -55,6 +56,9 @@ Notes:
   - Marks `incall_address_sent_at` after a confirmed incall booking.
 - `PATCH /admin/bookings/{booking_id}`
 - `GET /admin/sessions/active`
+- `DELETE /admin/sessions/{session_id}/messages`
+  - Clears stored conversation messages for that session from admin live chat.
+  - Admin-only action with audit event `messages.cleared`.
 - `GET /admin/notifications`
 - `POST /admin/agent/pause`
 - `POST /admin/agent/resume`

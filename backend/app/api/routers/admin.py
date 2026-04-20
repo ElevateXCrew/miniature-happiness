@@ -393,6 +393,39 @@ async def get_session_messages(session_id: uuid.UUID, db: AsyncSession = Depends
     ]
 
 
+@router.delete("/sessions/{session_id}/messages")
+async def clear_session_messages(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    from app.models.conversation_session import ConversationSession
+
+    result = await db.execute(
+        select(ConversationSession).where(ConversationSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    message_repo = MessageRepository(db)
+    deleted_count = await message_repo.delete_for_session(session_id)
+
+    await AuditRepository(db).log(
+        entity_type="conversation_session",
+        entity_id=session.id,
+        event_type="messages.cleared",
+        actor_type=ActorType.ADMIN,
+        actor_ref=str(current_user.id),
+        metadata={"deleted_count": deleted_count},
+    )
+
+    return {
+        "session_id": str(session_id),
+        "deleted_count": deleted_count,
+    }
+
+
 # ------------------------------------------------------------------
 # Notifications
 # ------------------------------------------------------------------

@@ -24,6 +24,13 @@ class MessageRepository:
         )
         return list(result.scalars().all())
 
+    async def delete_for_session(self, session_id: uuid.UUID) -> int:
+        messages = await self.list_for_session(session_id)
+        for message in messages:
+            await self.db.delete(message)
+        await self.db.flush()
+        return len(messages)
+
     async def save(self, message: Message) -> Message:
         self.db.add(message)
         await self.db.flush()

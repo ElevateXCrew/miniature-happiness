@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Play, Pause, MessageCircle, X, RefreshCw } from 'lucide-react';
+import { Play, Pause, MessageCircle, X, RefreshCw, Trash2 } from 'lucide-react';
 import { sessionsApi } from '@/lib/adminApi';
 import { useAdminRealtimeRefresh } from '@/hooks/useAdminRealtimeRefresh';
 import { Badge } from '@/components/ui/Badge';
@@ -45,6 +45,8 @@ function ChatPanel({
 }) {
   const [messages, setMessages] = useState<SessionMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -54,6 +56,25 @@ function ChatPanel({
       setMessages(data);
     } finally {
       setLoading(false);
+    }
+  }, [session.id]);
+
+  const clearHistory = useCallback(async () => {
+    const confirmed = window.confirm(
+      'Delete all previous conversation messages for this chat? This cannot be undone.',
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await sessionsApi.clearMessages(session.id);
+      setMessages([]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete chat history.';
+      setDeleteError(msg);
+    } finally {
+      setDeleting(false);
     }
   }, [session.id]);
 
@@ -78,6 +99,17 @@ function ChatPanel({
           </Badge>
         </div>
         <div className={styles.chatHeaderRight}>
+          <Button
+            id="delete-chat-history-btn"
+            variant="danger"
+            size="sm"
+            loading={deleting}
+            onClick={() => void clearHistory()}
+            title="Delete all messages"
+            disabled={loading}
+          >
+            <Trash2 size={14} /> Delete History
+          </Button>
           <button
             id="refresh-chat-btn"
             className={styles.iconBtn}
@@ -98,6 +130,9 @@ function ChatPanel({
       </div>
 
       <div className={styles.chatBody}>
+        {deleteError && (
+          <p className={styles.chatError}>{deleteError}</p>
+        )}
         {loading ? (
           <div className={styles.chatLoading}><Spinner /></div>
         ) : messages.length === 0 ? (

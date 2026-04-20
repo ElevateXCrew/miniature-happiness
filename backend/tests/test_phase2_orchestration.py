@@ -339,6 +339,54 @@ async def test_sync_draft_from_inbound_sets_booking_type(
 
 
 @pytest.mark.asyncio
+async def test_pre_capture_required_field_from_inbound_updates_age(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    await runtime._pre_capture_required_field_from_inbound(
+        session_id=session.id,
+        inbound_text="I am 24 babe",
+    )
+
+    refreshed_booking = await db.get(Booking, booking.id)
+    assert refreshed_booking is not None
+    assert refreshed_booking.client_age == 24
+    assert runtime.booking_service.get_next_required_field(refreshed_booking) == "client_ethnicity"
+
+
+@pytest.mark.asyncio
 async def test_override_redundant_time_question_when_time_already_known(
     db: AsyncSession,
 ) -> None:
