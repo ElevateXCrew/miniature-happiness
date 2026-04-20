@@ -75,6 +75,8 @@ The system should:
 - keep them if the booking has not been created yet
 - acknowledge them naturally
 - make them visible to the admin
+- fetch media from Twilio and store local copies by client phone folder for reliable admin rendering
+- pass attachment context into agent runtime so image-only messages still get natural Alysha responses
 
 ---
 
@@ -96,6 +98,11 @@ The assistant should remember:
 - whether a booking is active, pending, confirmed, completed, or cancelled
 
 This memory should survive interruptions and allow the assistant to continue naturally later.
+
+---
+
+### G. Worker Mobile Relay
+When worker sends a relay command from mobile, the client-facing message should be generated in Alysha voice by agent runtime, not raw hardcoded passthrough text.
 
 ---
 
@@ -436,7 +443,7 @@ This section defines what future agents should optimize for when fixing bugs in 
 ### A) Current System Reality
 
 -   Backend deterministic orchestration, Twilio channels, lifecycle, reliability hardening, JWT auth/RBAC, admin panel, worker portal, and realtime sync are already implemented.
--   Worker mobile is chat-first: `POST /worker/messages` is the primary interaction path, with worker query/command/relay intents returning structured `executed_actions`.
+-   Worker mobile is chat-first: `POST /worker/messages` is the primary interaction path, with worker query/command/relay intents and free-form Alysha chat returning structured `executed_actions`.
 -   Worker realtime stream includes worker-targeted chat and operation events for mobile UX continuity.
 -   The project is now in stabilization and launch-governance mode, not feature-discovery mode.
 -   Any bug fix must preserve the backend state machine as source of truth.

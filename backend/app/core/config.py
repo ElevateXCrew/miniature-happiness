@@ -47,5 +47,9 @@ class Settings(BaseSettings):
     outbound_retry_max_attempts: int = 3
     outbound_retry_backoff_seconds: int = 30
 
+    # Media storage
+    media_storage_root: str = "media"
+    media_fetch_timeout_seconds: int = 20
+
 
 settings = Settings()
