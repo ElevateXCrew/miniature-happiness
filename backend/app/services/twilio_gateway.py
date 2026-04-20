@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any
 
+import httpx
 from fastapi import Request
 from twilio.base.exceptions import TwilioException
 from twilio.request_validator import RequestValidator
@@ -88,3 +89,17 @@ class TwilioGateway:
             return OutboundSendResult(ok=True, sid=msg.sid)
         except TwilioException as exc:
             return OutboundSendResult(ok=False, sid=None, error=str(exc))
+
+    async def fetch_media_binary(self, source_url: str) -> tuple[bytes, str | None]:
+        account_sid = settings.twilio_account_sid.strip()
+        auth_token = settings.twilio_auth_token.strip()
+        auth: tuple[str, str] | None = None
+        if account_sid and auth_token:
+            auth = (account_sid, auth_token)
+
+        timeout = httpx.Timeout(settings.media_fetch_timeout_seconds)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, auth=auth) as client:
+            resp = await client.get(source_url)
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type")
+            return resp.content, content_type

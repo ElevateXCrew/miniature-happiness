@@ -412,6 +412,36 @@ async def test_worker_message_query_returns_next_booking_with_action(
 
 
 @pytest.mark.asyncio
+async def test_worker_message_free_form_uses_alysha_style_reply(
+    client: AsyncClient,
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    c = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, c])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=c.id,
+        worker_id=worker.id,
+        state=ConversationState.IDLE,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    res = await client.post(
+        "/worker/messages",
+        json={"worker_id": str(worker.id), "message_text": "Hy"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["success"] is True
+    assert body["assistant_reply"] == "Hi babe 😘"
+    assert "I can check your next booking" not in body["assistant_reply"]
+
+
+@pytest.mark.asyncio
 async def test_worker_message_relay_dispatches_client_message(
     client: AsyncClient,
     db: AsyncSession,
@@ -465,10 +495,14 @@ async def test_worker_message_relay_dispatches_client_message(
         select(Message).where(
             Message.session_id == session.id,
             Message.direction == MessageDirection.OUTBOUND,
-            Message.body == relay_text,
         )
     )
-    assert msg_result.scalars().first() is not None
+    saved = msg_result.scalars().first()
+    assert saved is not None
+    assert saved.body is not None
+    assert saved.raw_payload is not None
+    assert saved.raw_payload.get("worker_relay") is True
+    assert saved.raw_payload.get("worker_instruction") == relay_text
 
 
 @pytest.mark.asyncio

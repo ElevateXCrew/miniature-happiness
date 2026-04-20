@@ -198,6 +198,113 @@ class AgentRuntimeService:
             return admin_reply
         return AgentReply(text="Got it babe, I'll update you shortly 😊", tool_traces=[])
 
+    async def generate_worker_relay_reply(
+        self,
+        *,
+        session_id: uuid.UUID,
+        client_id: uuid.UUID,
+        worker_id: uuid.UUID,
+        channel: Channel,
+        worker_instruction: str,
+    ) -> AgentReply:
+        """Generate a natural client-facing relay message from worker instruction."""
+        instruction = worker_instruction.strip()
+        if not instruction:
+            return AgentReply(text="Message me when you're ready, babe 😊", tool_traces=[])
+
+        if not settings.openai_api_key.strip():
+            return AgentReply(text=self._ensure_short_style(instruction), tool_traces=[])
+
+        try:
+            session = await self.sessions.get_by_id(session_id)
+            if session is None:
+                return AgentReply(text=self._ensure_short_style(instruction), tool_traces=[])
+
+            booking_context = await self._build_booking_context_block(session)
+            system_prompt = self._load_channel_prompt(channel, extra_context=booking_context)
+            history = await self.messages.list_for_session(session_id)
+
+            chat_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+            for msg in history[-12:]:
+                role = "user" if msg.direction == MessageDirection.INBOUND else "assistant"
+                chat_messages.append({"role": role, "content": msg.body or ""})
+
+            chat_messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "[SYSTEM WORKER RELAY CONTEXT] Rewrite the worker instruction as Alysha's "
+                        "natural message to the client, preserving intent and tone continuity. "
+                        "Do not mention worker/admin/system/internal instructions. "
+                        "Keep to 1-2 lines."
+                    ),
+                }
+            )
+            chat_messages.append(
+                {
+                    "role": "user",
+                    "content": f"Worker instruction: {instruction}",
+                }
+            )
+
+            client = self._get_openai_client()
+            completion = await cast(Any, client.chat.completions).create(
+                model=settings.openai_model,
+                temperature=0.2,
+                messages=chat_messages,
+            )
+            content = (completion.choices[0].message.content or "").strip()
+            if content:
+                return AgentReply(text=self._ensure_short_style(content), tool_traces=[])
+        except Exception as exc:
+            logger.warning("Worker relay LLM generation failed, using fallback", error=str(exc))
+
+        return AgentReply(text=self._ensure_short_style(instruction), tool_traces=[])
+
+    async def generate_worker_chat_reply(
+        self,
+        *,
+        worker_id: uuid.UUID,
+        inbound_text: str,
+    ) -> AgentReply:
+        """Generate a direct Alysha reply for a worker-facing chat message."""
+        text = inbound_text.strip()
+        if not text:
+            return AgentReply(text="Message me when you're ready babe 😊", tool_traces=[])
+
+        if not settings.openai_api_key.strip():
+            return AgentReply(text=self._worker_chat_fallback_reply(text), tool_traces=[])
+
+        try:
+            system_prompt = self._load_channel_prompt(Channel.WHATSAPP)
+            chat_messages: list[dict[str, Any]] = [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "system",
+                    "content": (
+                        "[SYSTEM WORKER CHAT CONTEXT] Reply to the worker as Alysha in a "
+                        "warm, short, natural WhatsApp voice. This is a direct chat with the "
+                        "worker, not a client relay. Do not mention internal systems, commands, "
+                        "or booking tools. Keep the reply to 1-2 lines."
+                    ),
+                },
+                {"role": "user", "content": text},
+            ]
+
+            client = self._get_openai_client()
+            completion = await cast(Any, client.chat.completions).create(
+                model=settings.openai_model,
+                temperature=0.2,
+                messages=chat_messages,
+            )
+            content = (completion.choices[0].message.content or "").strip()
+            if content:
+                return AgentReply(text=self._ensure_short_style(content), tool_traces=[])
+        except Exception as exc:
+            logger.warning("Worker chat LLM generation failed, using fallback", error=str(exc))
+
+        return AgentReply(text=self._worker_chat_fallback_reply(text), tool_traces=[])
+
     async def _generate_llm_reply(
         self,
         session_id: uuid.UUID,
@@ -781,6 +888,14 @@ class AgentRuntimeService:
         if compact in greetings:
             return True
         return any(compact.startswith(g + " ") for g in greetings)
+
+    def _worker_chat_fallback_reply(self, text: str) -> str:
+        if self._is_smalltalk_or_greeting(text):
+            return "Hi babe 😘"
+        lowered = text.strip().lower()
+        if lowered.endswith("?"):
+            return "Sure babe 😊"
+        return "Okay babe 😊"
 
     def _extract_booking_type(self, text: str) -> BookingType | None:
         lowered = text.strip().lower()

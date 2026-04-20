@@ -163,12 +163,17 @@ class ConversationOrchestrator:
                 twilio_media_sid=media_item.get("twilio_media_sid"),
             )
 
+        effective_inbound_text = self._build_effective_inbound_text(
+            inbound_text=inbound_text,
+            media_items=media_items,
+        )
+
         reply = await self.runtime.generate_reply(
             session_id=session.id,
             client_id=client.id,
             worker_id=worker.id,
             channel=channel,
-            inbound_text=inbound_text,
+            inbound_text=effective_inbound_text,
             attached_media_count=len(media_items),
         )
 
@@ -323,3 +328,23 @@ class ConversationOrchestrator:
         if value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
+
+    def _build_effective_inbound_text(
+        self,
+        *,
+        inbound_text: str,
+        media_items: list[dict[str, Any]],
+    ) -> str:
+        text = inbound_text.strip()
+        if not media_items:
+            return text
+
+        media_count = len(media_items)
+        media_note = (
+            "Client sent 1 image attachment."
+            if media_count == 1
+            else f"Client sent {media_count} image attachments."
+        )
+        if text:
+            return f"{text}\n\n[{media_note}]"
+        return media_note

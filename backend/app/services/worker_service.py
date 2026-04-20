@@ -119,10 +119,14 @@ class WorkerService:
                 executed_actions=command.executed_actions,
             )
 
-        reply = (
-            "I can check your next booking, free your slot, block time, "
-            "or relay a client message."
+        from app.services.agent_runtime import AgentRuntimeService
+
+        runtime = AgentRuntimeService(self.db)
+        reply_result = await runtime.generate_worker_chat_reply(
+            worker_id=worker_id,
+            inbound_text=text,
         )
+        reply = reply_result.text
         self._publish_worker_chat_reply(
             worker_user_id=worker_user_id,
             reply=reply,
@@ -410,10 +414,22 @@ class WorkerService:
         if session:
             channel = session[-1].channel
 
+        from app.services.agent_runtime import AgentRuntimeService
+
+        runtime = AgentRuntimeService(self.db)
+        relay_reply = await runtime.generate_worker_relay_reply(
+            session_id=booking.session_id,
+            client_id=client.id,
+            worker_id=worker_id,
+            channel=channel,
+            worker_instruction=relay_text,
+        )
+        outbound_text = relay_reply.text
+
         send_result = await self.twilio.send_client_message(
             to_phone_e164=client.phone_e164,
             channel=channel.value,
-            text=relay_text,
+            text=outbound_text,
         )
         await self.messages.save(
             Message(
@@ -421,11 +437,13 @@ class WorkerService:
                 direction=MessageDirection.OUTBOUND,
                 channel=channel,
                 sender_type=SenderType.AGENT,
-                body=relay_text,
+                body=outbound_text,
                 twilio_message_sid=send_result.sid,
                 raw_payload={
                     "worker_relay": True,
                     "worker_id": str(worker_id),
+                    "worker_instruction": relay_text,
+                    "tool_traces": relay_reply.tool_traces,
                     "dispatch": {
                         "ok": send_result.ok,
                         "sid": send_result.sid,
