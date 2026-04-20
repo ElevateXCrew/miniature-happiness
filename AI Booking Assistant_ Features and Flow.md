@@ -317,11 +317,15 @@ The system operates within a multi-way interaction environment:
 3.  **The Agent (AI):** It is the primary entity, around while other three will communicate. The conversational system that talks to Clients and Workers. It is responsible for generating human-like responses and calling "Tools" to update the backend.
     
 4.  **The Client:** The person inquiring about services and making bookings.
-### 2) Relation of three entities with Agent
-1. **Agent to Admin:** When admin confirms, rejects, or cancels a booking from the control panel, backend sends an internal status instruction to the agent runtime. Alysha then sends the client decision update in 1-2 lines, aligned with the recent conversation context. Admin can still edit booking status from the panel.
-2. **Admin Live Chat Moderation:** Admin can clear a selected session's previous conversation history from the Live Chat panel when moderation or cleanup is required.
-3. . **Agent to Worker:** As the agent is conversing with client on behalf of the worker, the worker can ask any query about the bookings, ask agent for changing or adjusting booking timing. The AI must aware about the worker and repose like an assistant of the worker.
-4. **Agent to Client:** The agent should converse naturally with the client.
+### 2) Relation of Three Entities with Agent
+
+1. **Agent to Admin:** When the admin confirms, rejects, or cancels a booking from the control panel, the backend sends an internal status instruction to the agent runtime. Alysha then sends the client a decision update in 1–2 lines, aligned with the recent conversation context. The admin can still edit the booking status from the panel.
+
+2. **Admin Live Chat Moderation:** The admin can clear a selected session’s previous conversation history from the Live Chat panel when moderation or cleanup is required.
+
+3. **Agent to Worker:** While the agent is conversing with the client on behalf of the worker, the worker can ask queries about bookings or request changes or adjustments to booking timings. The AI must be aware of the worker and respond as the worker’s assistant.
+
+4. **Agent to Client:** The agent should communicate naturally with the client.
     
 
 ## 2) Deterministic Control Philosophy
