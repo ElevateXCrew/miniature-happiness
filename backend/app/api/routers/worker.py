@@ -191,5 +191,14 @@ async def worker_message(
 ) -> Any:
     body.worker_id = _resolve_worker_id(current_user, body.worker_id)
     svc = WorkerService(db)
-    result = await svc.process_command(worker_id=body.worker_id, message_text=body.message_text)
-    return {"success": result.success, "message": result.message}
+    result = await svc.process_worker_message(
+        worker_user_id=current_user.id,
+        worker_id=body.worker_id,
+        message_text=body.message_text,
+    )
+    return {
+        "success": result.success,
+        "assistant_reply": result.assistant_reply,
+        "message": result.assistant_reply,
+        "executed_actions": result.executed_actions,
+    }

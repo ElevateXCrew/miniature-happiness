@@ -441,6 +441,7 @@ class BookingService:
             "booking.status_changed",
             {
                 "booking_id": str(booking.id),
+                "worker_id": str(booking.worker_id),
                 "status": booking.status.value,
                 "actor_type": actor_type.value,
                 "actor_ref": actor_ref,

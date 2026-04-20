@@ -135,3 +135,32 @@ async def test_admin_can_toggle_worker_section_and_worker_gets_403(
 async def test_invalid_token_is_unauthorized(client: AsyncClient) -> None:
     res = await client.get("/auth/me", headers={"Authorization": "Bearer invalid"})
     assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_worker_cannot_post_message_for_another_worker(
+    client: AsyncClient,
+    db: AsyncSession,
+) -> None:
+    worker_one = Worker(name="Alysha One", timezone="Europe/London", is_active=True)
+    worker_two = Worker(name="Alysha Two", timezone="Europe/London", is_active=True)
+    db.add_all([worker_one, worker_two])
+    await db.flush()
+
+    worker_user = User(
+        email=f"worker-{uuid.uuid4().hex[:8]}@test.local",
+        password_hash=hash_password("worker123"),
+        role=UserRole.WORKER,
+        is_active=True,
+        worker_id=worker_one.id,
+    )
+    db.add(worker_user)
+    await db.flush()
+
+    worker_token = (await AuthService(db).issue_token_pair(worker_user))["access_token"]
+    res = await client.post(
+        "/worker/messages",
+        json={"worker_id": str(worker_two.id), "message_text": "What is my next booking time?"},
+        headers={"Authorization": f"Bearer {worker_token}"},
+    )
+    assert res.status_code == 403

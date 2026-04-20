@@ -12,6 +12,8 @@ This file is the single execution source of truth for project planning.
 - Twilio webhook regression tests are aligned with current deterministic contract (empty TwiML response + orchestrator-managed outbound sends).
 - Phase 6 stabilization pass is complete: dashboard fail-soft behavior, availability error recovery, role/section consistency checks, and targeted regression coverage were executed.
 - Post-stabilization booking integrity guard is active: availability success now ensures a persisted draft booking is linked to session context before confirmation/review transitions.
+- Worker mobile chat-first path is active: `/worker/messages` is the primary worker interaction endpoint with deterministic intent handling and `executed_actions` response traces.
+- Worker realtime visibility now includes worker-targeted chat/operation events and worker-owned booking status updates.
 
 ## Scope Locks (Agreed)
 
@@ -23,6 +25,9 @@ This file is the single execution source of truth for project planning.
 - Booking decision flow:
   - Admin approve/reject: updates booking status and routes a decision instruction through agent runtime so Alysha sends the client update in continuity with prior conversation.
   - Worker approve/reject: updates booking status and syncs admin panel instantly.
+- Worker mobile interaction:
+  - Primary path is chat-first (`POST /worker/messages` + worker SSE stream).
+  - Optional direct action routes remain supported for compatibility (`/worker/bookings/*`, `/worker/availability/*`).
 - Admin live chat moderation:
   - Admin can clear prior conversation history for a specific session from the Live Chat panel.
   - Clear-history action is admin-only and audit-logged.

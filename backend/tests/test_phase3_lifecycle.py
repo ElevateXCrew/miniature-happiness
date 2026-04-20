@@ -364,6 +364,114 @@ async def test_worker_free_now_marks_active_booking_completed(
 
 
 @pytest.mark.asyncio
+async def test_worker_message_query_returns_next_booking_with_action(
+    client: AsyncClient,
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    c = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, c])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=c.id,
+        worker_id=worker.id,
+        state=ConversationState.IDLE,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start = datetime.now(UTC) + timedelta(hours=3)
+    booking = Booking(
+        client_id=c.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.CONFIRMED,
+        booking_type=BookingType.OUTCALL,
+        scheduled_start_at=start,
+        duration_minutes=60,
+        scheduled_end_at=start + timedelta(minutes=60),
+        client_age=29,
+        client_ethnicity="British",
+    )
+    db.add(booking)
+    await db.flush()
+
+    res = await client.post(
+        "/worker/messages",
+        json={"worker_id": str(worker.id), "message_text": "What is my next booking time?"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["success"] is True
+    assert "assistant_reply" in body
+    assert body["executed_actions"]
+    assert body["executed_actions"][0]["name"] == "booking.lookup_next"
+    assert body["executed_actions"][0]["booking_id"] == str(booking.id)
+
+
+@pytest.mark.asyncio
+async def test_worker_message_relay_dispatches_client_message(
+    client: AsyncClient,
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    c = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, c])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=c.id,
+        worker_id=worker.id,
+        state=ConversationState.IDLE,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start = datetime.now(UTC) + timedelta(hours=2)
+    booking = Booking(
+        client_id=c.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.CONFIRMED,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start,
+        duration_minutes=60,
+        scheduled_end_at=start + timedelta(minutes=60),
+        client_age=26,
+        client_ethnicity="British",
+    )
+    db.add(booking)
+    await db.flush()
+
+    relay_text = "wait outside the building. I will call you."
+    res = await client.post(
+        "/worker/messages",
+        json={
+            "worker_id": str(worker.id),
+            "message_text": f"Tell him to {relay_text}",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["success"] is True
+    assert body["executed_actions"]
+    assert body["executed_actions"][0]["name"] == "client.message.send"
+    assert body["executed_actions"][0]["ok"] is True
+
+    msg_result = await db.execute(
+        select(Message).where(
+            Message.session_id == session.id,
+            Message.direction == MessageDirection.OUTBOUND,
+            Message.body == relay_text,
+        )
+    )
+    assert msg_result.scalars().first() is not None
+
+
+@pytest.mark.asyncio
 async def test_outcall_cannot_submit_without_address_and_advance(db: AsyncSession) -> None:
     worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
     client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")

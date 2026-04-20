@@ -103,6 +103,7 @@ async def test_worker_stream_receives_own_permission_updates_only(
 
     first_update_visible = is_worker_event_visible(
         str(first_worker_user.id),
+        str(first_worker.id),
         'worker.permissions.updated',
         {
             'worker_user_id': str(first_worker_user.id),
@@ -113,6 +114,7 @@ async def test_worker_stream_receives_own_permission_updates_only(
 
     second_update_visible = is_worker_event_visible(
         str(first_worker_user.id),
+        str(first_worker.id),
         'worker.permissions.updated',
         {
             'worker_user_id': str(second_worker_user.id),
@@ -123,12 +125,61 @@ async def test_worker_stream_receives_own_permission_updates_only(
 
     different_event_hidden = is_worker_event_visible(
         str(first_worker_user.id),
+        str(first_worker.id),
         'booking.status_changed',
         {
             'worker_user_id': str(first_worker_user.id),
         },
     )
     assert different_event_hidden is False
+
+    worker_chat_visible = is_worker_event_visible(
+        str(first_worker_user.id),
+        str(first_worker.id),
+        'worker.chat_reply',
+        {
+            'worker_user_id': str(first_worker_user.id),
+            'reply': 'Done. I sent that to the client.',
+            'executed_actions': [],
+        },
+    )
+    assert worker_chat_visible is True
+
+    worker_operation_visible = is_worker_event_visible(
+        str(first_worker_user.id),
+        str(first_worker.id),
+        'worker.operation.completed',
+        {
+            'worker_user_id': str(first_worker_user.id),
+            'operation': 'free_now',
+            'ok': True,
+            'message': 'Done.',
+            'executed_actions': [],
+        },
+    )
+    assert worker_operation_visible is True
+
+    worker_booking_update_visible = is_worker_event_visible(
+        str(first_worker_user.id),
+        str(first_worker.id),
+        'booking.status_changed',
+        {
+            'worker_id': str(first_worker.id),
+            'status': 'CONFIRMED',
+        },
+    )
+    assert worker_booking_update_visible is True
+
+    other_worker_booking_hidden = is_worker_event_visible(
+        str(first_worker_user.id),
+        str(first_worker.id),
+        'booking.status_changed',
+        {
+            'worker_id': str(second_worker.id),
+            'status': 'CONFIRMED',
+        },
+    )
+    assert other_worker_booking_hidden is False
 
 
 @pytest.mark.asyncio

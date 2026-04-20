@@ -76,18 +76,68 @@ Notes:
 
 ## Worker APIs (Mobile-ready)
 
-- `GET /worker/bookings/upcoming`
-- `POST /worker/bookings/{booking_id}/approve`
-- `POST /worker/bookings/{booking_id}/reject`
-- `POST /worker/bookings/{booking_id}/complete-early`
-- `POST /worker/availability/free-now`
-- `POST /worker/availability/block`
-- `POST /worker/messages`
+- Primary mobile path:
+  - `POST /worker/messages`
+  - `GET /events/worker/stream`
+- Optional direct action routes (kept for compatibility):
+  - `GET /worker/bookings/upcoming`
+  - `POST /worker/bookings/{booking_id}/approve`
+  - `POST /worker/bookings/{booking_id}/reject`
+  - `POST /worker/bookings/{booking_id}/complete-early`
+  - `POST /worker/availability/free-now`
+  - `POST /worker/availability/block`
 
 Notes:
 - Worker endpoints require authenticated user role `worker` or admin override.
 - If admin disables a section, related worker endpoints must return `403`.
+- `POST /worker/messages` keeps `worker_id` in request for compatibility, and backend enforces JWT worker identity match.
 - Full request/response integration guide is in `docs/MOBILE_APP_API_INTEGRATION.md`.
+
+Example chat request (query intent):
+```json
+{
+  "worker_id": "<worker_uuid>",
+  "message_text": "What is my next booking time?"
+}
+```
+
+Example chat response:
+```json
+{
+  "success": true,
+  "assistant_reply": "Your next booking is at 2026-04-18T20:00:00+00:00.",
+  "message": "Your next booking is at 2026-04-18T20:00:00+00:00.",
+  "executed_actions": [
+    {
+      "name": "booking.lookup_next",
+      "ok": true,
+      "booking_id": "<booking_uuid>",
+      "scheduled_start_at": "2026-04-18T20:00:00+00:00",
+      "duration_minutes": 60,
+      "booking_type": "outcall"
+    }
+  ]
+}
+```
+
+Example chat request (relay intent):
+```json
+{
+  "worker_id": "<worker_uuid>",
+  "message_text": "Tell him to wait outside the building. I will call him."
+}
+```
+
+Example relay action entry:
+```json
+{
+  "name": "client.message.send",
+  "ok": true,
+  "booking_id": "<booking_uuid>",
+  "channel": "whatsapp",
+  "sid": "SM123"
+}
+```
 
 ## Media APIs
 
@@ -123,5 +173,9 @@ Notes:
 Notes:
 - Stream now emits booking lifecycle and worker sync events with incremental `id` for resume via `Last-Event-ID`.
 - Admin stream emits booking lifecycle, worker command, permission, and notification lifecycle events.
-- Worker stream is role-guarded (`worker` only) and emits only worker-targeted permission updates.
+- Worker stream is role-guarded (`worker` only) and emits worker-targeted updates for:
+  - `worker.permissions.updated`
+  - `worker.chat_reply`
+  - `worker.operation.completed`
+  - `booking.status_changed` for bookings belonging to the authenticated worker
 - Both streams send a connection event (`admin_stream.connected`, `worker_stream.connected`) and keepalive comments.

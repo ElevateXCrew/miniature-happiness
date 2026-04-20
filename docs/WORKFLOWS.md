@@ -32,12 +32,26 @@
 
 ## 3) Worker "Free Now" Command
 
-1. Worker sends command through worker API.
-2. Agent runtime interprets intent using worker command tool.
+1. Worker sends chat prompt through `POST /worker/messages`.
+2. Worker service classifies intent (`free now`, `done early`, `finished`).
 3. Backend marks active booking complete early (if valid).
 4. Slot is released immediately.
-5. Admin panel receives sync event.
-6. Future availability checks reflect freed slot.
+5. Worker stream emits `worker.operation.completed` and booking lifecycle updates.
+6. Admin panel receives sync event.
+7. Future availability checks reflect freed slot.
+
+## 11) Worker Chat-first Mobile Flow
+
+1. Worker app opens stream with `GET /events/worker/stream`.
+2. Worker sends natural-language prompt to `POST /worker/messages`.
+3. Backend resolves one of: query intent, command intent, or client relay intent.
+4. Backend executes deterministic operation(s) and returns `assistant_reply` plus `executed_actions`.
+5. Worker stream emits chat/operation updates:
+	- `worker.chat_reply`
+	- `worker.operation.completed`
+	- `booking.status_changed` for worker-owned bookings
+6. Unknown prompt receives a short natural fallback response (not a technical dead-end).
+7. Optional direct action routes remain available for compatibility.
 
 ## 4) T-20 Reminder Flow
 

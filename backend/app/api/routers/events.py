@@ -24,12 +24,19 @@ def _encode_sse(event_id: int | None, payload: dict[str, object]) -> str:
 
 def is_worker_event_visible(
     worker_user_id: str,
+    worker_id: str | None,
     event_type: str,
     payload: dict[str, object],
 ) -> bool:
-    if event_type != "worker.permissions.updated":
-        return False
-    return payload.get("worker_user_id") == worker_user_id
+    if event_type == "worker.permissions.updated":
+        return payload.get("worker_user_id") == worker_user_id
+    if event_type in {"worker.chat_reply", "worker.operation.completed"}:
+        return payload.get("worker_user_id") == worker_user_id
+    if event_type == "booking.status_changed":
+        if worker_id is None:
+            return False
+        return payload.get("worker_id") == worker_id
+    return False
 
 
 @router.get("/events/admin/stream")
@@ -76,11 +83,17 @@ async def worker_event_stream_endpoint(
         last_event_id = int(raw_last_id)
 
     worker_user_id = str(current_user.id)
+    worker_id = str(current_user.worker_id) if current_user.worker_id is not None else None
 
     async def generator() -> AsyncIterator[str]:
         for event in admin_event_stream.history_since(last_event_id):
             payload_obj = event.to_dict()
-            if is_worker_event_visible(worker_user_id, event.type, payload_obj.get("payload", {})):
+            if is_worker_event_visible(
+                worker_user_id,
+                worker_id,
+                event.type,
+                payload_obj.get("payload", {}),
+            ):
                 yield _encode_sse(event.id, payload_obj)
 
         queue = admin_event_stream.subscribe()
@@ -96,6 +109,7 @@ async def worker_event_stream_endpoint(
                     payload_obj = event.to_dict()
                     if is_worker_event_visible(
                         worker_user_id,
+                        worker_id,
                         event.type,
                         payload_obj.get("payload", {}),
                     ):

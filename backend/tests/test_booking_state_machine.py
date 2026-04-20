@@ -48,6 +48,8 @@ async def _setup(db: AsyncSession):
         scheduled_end_at=start + timedelta(minutes=60),
         client_age=25,
         client_ethnicity="British",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
     )
     db.add(booking)
     await db.flush()
@@ -159,6 +161,8 @@ async def test_double_booking_blocked(db: AsyncSession) -> None:
         scheduled_end_at=start + timedelta(minutes=60),
         client_age=22,
         client_ethnicity="Asian",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
     )
     db.add(booking2)
     await db.flush()

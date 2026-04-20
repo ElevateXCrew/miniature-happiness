@@ -585,6 +585,8 @@ class AgentRuntimeService:
 
         if field_name == "duration_minutes":
             extracted_minutes = self._extract_duration_minutes(inbound_text)
+            if field_value is None:
+                return "Invalid duration value."
             try:
                 requested_minutes = int(field_value)
             except (TypeError, ValueError):
@@ -595,6 +597,8 @@ class AgentRuntimeService:
         if field_name == "client_age":
             age_cues = ("age", "old", "year", "years", "i am", "i'm")
             extracted_age = self._extract_age(inbound_text)
+            if field_value is None:
+                return "Invalid age value."
             try:
                 requested_age = int(field_value)
             except (TypeError, ValueError):
@@ -614,6 +618,8 @@ class AgentRuntimeService:
 
         if field_name == "client_size_inches":
             extracted_size = self._extract_size_inches(inbound_text)
+            if field_value is None:
+                return "Invalid size value."
             try:
                 requested_size = int(field_value)
             except (TypeError, ValueError):

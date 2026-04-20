@@ -436,6 +436,8 @@ This section defines what future agents should optimize for when fixing bugs in 
 ### A) Current System Reality
 
 -   Backend deterministic orchestration, Twilio channels, lifecycle, reliability hardening, JWT auth/RBAC, admin panel, worker portal, and realtime sync are already implemented.
+-   Worker mobile is chat-first: `POST /worker/messages` is the primary interaction path, with worker query/command/relay intents returning structured `executed_actions`.
+-   Worker realtime stream includes worker-targeted chat and operation events for mobile UX continuity.
 -   The project is now in stabilization and launch-governance mode, not feature-discovery mode.
 -   Any bug fix must preserve the backend state machine as source of truth.
 

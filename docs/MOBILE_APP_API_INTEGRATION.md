@@ -125,6 +125,13 @@ All worker APIs require:
 - authenticated user role `worker` or `admin`.
 - matching `worker_id` for worker role (backend enforces this).
 
+### Primary Mobile Contract (Chat-first)
+
+- `POST /worker/messages`
+- `GET /events/worker/stream`
+
+Use direct action routes only when the app explicitly needs one-shot operational calls.
+
 ## 1) Upcoming Bookings
 
 - `GET /worker/bookings/upcoming?worker_id=<worker_uuid>`
@@ -248,11 +255,53 @@ Response:
 ```json
 {
   "success": true,
-  "message": "Command processed"
+  "assistant_reply": "Done. I marked your active booking complete and freed the slot.",
+  "message": "Done. I marked your active booking complete and freed the slot.",
+  "executed_actions": [
+    {
+      "name": "booking.complete_early",
+      "ok": true,
+      "booking_id": "<booking_uuid>",
+      "status": "COMPLETED"
+    }
+  ]
 }
 ```
 
 Permission dependency: `live_chat` section.
+
+Supported intent examples:
+
+1. Query intent
+```json
+{
+  "worker_id": "<worker_uuid>",
+  "message_text": "What is my next booking time?"
+}
+```
+Response includes `booking.lookup_next` in `executed_actions`.
+
+2. Command intent
+```json
+{
+  "worker_id": "<worker_uuid>",
+  "message_text": "free now"
+}
+```
+Response includes `booking.complete_early`.
+
+3. Client relay intent
+```json
+{
+  "worker_id": "<worker_uuid>",
+  "message_text": "Tell him to wait outside the building. I will call him."
+}
+```
+Response includes `client.message.send` when dispatch succeeds.
+
+Unknown intent behavior:
+- The endpoint returns a short natural Alysha fallback reply.
+- The endpoint does not return a dead-end technical error for unrecognized chat prompts.
 
 ## Realtime (SSE)
 
@@ -265,20 +314,32 @@ Permission dependency: `live_chat` section.
 Notes:
 - Keep connection open (SSE).
 - Stream sends keepalive comments periodically.
-- Worker currently receives worker-targeted events (for example permission updates).
+- Worker receives worker-targeted events:
+  - `worker.permissions.updated`
+  - `worker.chat_reply`
+  - `worker.operation.completed`
+  - `booking.status_changed` for bookings owned by that worker
 
 Example event envelope:
 ```json
 {
   "id": 123,
-  "type": "worker.permissions.updated",
+  "type": "worker.operation.completed",
   "payload": {
     "worker_user_id": "<user_uuid>",
-    "sections": {
-      "live_chat": false
-    }
+    "operation": "free_now",
+    "ok": true,
+    "message": "Done. I marked your active booking complete and freed the slot.",
+    "executed_actions": [
+      {
+        "name": "booking.complete_early",
+        "ok": true,
+        "booking_id": "<booking_uuid>",
+        "status": "COMPLETED"
+      }
+    ]
   },
-  "created_at": "2026-04-17T12:00:00+00:00"
+  "timestamp": "2026-04-17T12:00:00+00:00"
 }
 ```
 
@@ -303,8 +364,9 @@ Mobile behavior:
 3. Call `/ui/sections`; build permission-aware navigation.
 4. Fetch upcoming bookings.
 5. Start SSE worker stream.
-6. On `401`: refresh token and retry request once.
-7. On permission change event: re-fetch `/ui/sections` and update UI immediately.
+6. Send worker chat prompts to `/worker/messages` as the primary interaction path.
+7. On `401`: refresh token and retry request once.
+8. On permission change event: re-fetch `/ui/sections` and update UI immediately.
 
 ## QA Checklist for Mobile Integration
 
@@ -312,5 +374,6 @@ Mobile behavior:
 - Disabled section is hidden in app and backend returns `403` when called directly.
 - Upcoming bookings list loads.
 - Approve/reject/complete-early actions work and state updates are reflected.
-- Free-now and worker message commands execute successfully.
+- Worker message query/command/relay intents execute successfully with `executed_actions`.
+- Free-now direct route remains operational for compatibility.
 - SSE reconnect + `Last-Event-ID` resume works.
