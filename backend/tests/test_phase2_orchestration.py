@@ -186,6 +186,14 @@ async def test_check_availability_tool_call_overrides_invalid_worker_id(
 
 
 @pytest.mark.asyncio
+async def test_age_extraction_requires_explicit_age_statement(db: AsyncSession) -> None:
+    runtime = AgentRuntimeService(db)
+
+    assert runtime._extract_age("I am available at 19:00 tonight") is None
+    assert runtime._extract_age("I am 24 years old") == 24
+
+
+@pytest.mark.asyncio
 async def test_check_availability_auto_creates_draft_booking_for_active_session(
     db: AsyncSession,
 ) -> None:

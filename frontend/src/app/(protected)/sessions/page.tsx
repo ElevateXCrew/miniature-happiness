@@ -61,7 +61,7 @@ function ChatPanel({
 
   const clearHistory = useCallback(async () => {
     const confirmed = window.confirm(
-      'Delete all previous conversation messages for this chat? This cannot be undone.',
+      'Delete this full chat history? This will remove messages, draft bookings, and confirmed bookings for this session. This cannot be undone.',
     );
     if (!confirmed) return;
 

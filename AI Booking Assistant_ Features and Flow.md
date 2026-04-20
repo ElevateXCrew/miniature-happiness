@@ -99,10 +99,14 @@ The assistant should remember:
 
 This memory should survive interruptions and allow the assistant to continue naturally later.
 
+If conversation history is admin-cleared for a session, session-linked history artifacts must also be cleared (messages, linked media, linked notifications, and linked bookings including draft/confirmed), and session state should reset.
+
 ---
 
 ### G. Worker Mobile Relay
 When worker sends a relay command from mobile, the client-facing message should be generated in Alysha voice by agent runtime, not raw hardcoded passthrough text.
+
+Worker free-form mobile chat replies should come from worker runtime model output (no forced canned replacement string when model output is available).
 
 ---
 

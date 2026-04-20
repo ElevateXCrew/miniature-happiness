@@ -35,9 +35,11 @@ This file is the single execution source of truth for project planning.
 - Admin live chat moderation:
   - Admin can clear prior conversation history for a specific session from the Live Chat panel.
   - Clear-history action is admin-only and audit-logged.
+  - Clear-history now removes full session artifacts (messages, media, linked notifications, and linked bookings including draft/confirmed) and resets the session to idle/no active booking.
 - Conversation collection reliability:
   - Runtime pre-captures the next required booking field from inbound text before LLM generation to reduce repeated question loops.
   - Runtime blocks hallucinated/out-of-order booking field updates unless the value is supported by the current inbound text.
+  - Age capture only accepts explicit age statements and rejects inferred numeric values from unrelated text.
   - One-on-one confirmations accept short replies like `ok/okay/fine` to avoid repeated prompts.
   - Incall address is sent at final confirmation stage (not immediately after booking type selection).
 - Worker mobile chat relay:

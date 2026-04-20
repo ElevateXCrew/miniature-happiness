@@ -125,8 +125,7 @@ class WorkerRuntimeService:
             )
             content = (completion.choices[0].message.content or "").strip()
             if content:
-                safe_content = self._sanitize_worker_chat_reply(content)
-                return AgentReply(text=self._ensure_short_style(safe_content), tool_traces=[])
+                return AgentReply(text=self._ensure_short_style(content), tool_traces=[])
         except Exception as exc:
             logger.warning("Worker chat LLM generation failed, using fallback", error=str(exc))
 
@@ -167,22 +166,6 @@ class WorkerRuntimeService:
         if lowered.endswith("?"):
             return "Sure babe 😊"
         return "Okay babe 😊"
-
-    def _sanitize_worker_chat_reply(self, text: str) -> str:
-        lowered = text.lower()
-        intake_markers = (
-            "incall or outcall",
-            "what date and time",
-            "date and time do you want",
-            "confirm your age",
-            "what ethnicity",
-            "how long do you want to book",
-            "it'll just be you",
-            "one-on-one",
-        )
-        if any(marker in lowered for marker in intake_markers):
-            return "Sure babe 😊"
-        return text
 
     def _is_smalltalk_or_greeting(self, text: str) -> bool:
         lowered = text.strip().lower()

@@ -210,14 +210,6 @@ class ClientRuntimeService:
         if session is None:
             return AgentReply(text="Hey babe 😘", tool_traces=[])
 
-        if (
-            session.active_booking_id is None
-            and session.state == ConversationState.IDLE
-            and not any(term in inbound_text.lower() for term in _BOOKING_INTENT_TERMS)
-            and self._is_smalltalk_or_greeting(inbound_text)
-        ):
-            return AgentReply(text="Hi babe 😘", tool_traces=[])
-
         await self._sync_draft_from_inbound(session_id=session_id, inbound_text=inbound_text)
         await self._pre_capture_required_field_from_inbound(
             session_id=session_id,
@@ -1153,10 +1145,25 @@ class ClientRuntimeService:
         return None
 
     def _extract_age(self, text: str) -> int | None:
-        match = re.search(r"\b(\d{2})\b", text)
-        if not match:
-            return None
-        return int(match.group(1))
+        lowered = text.lower().strip()
+        patterns = (
+            r"\bage\s*(?:is|:)?\s*(\d{2})\b",
+            r"\b(?:i am|i'm|im)\s*(\d{2})\b(?!\s*[:.])",
+            r"\b(\d{2})\s*(?:years?\s*old|years?|yrs?)\b",
+            r"\b(\d{2})\s*yo\b",
+        )
+
+        for pattern in patterns:
+            match = re.search(pattern, lowered)
+            if not match:
+                continue
+            try:
+                age = int(match.group(1))
+            except (TypeError, ValueError):
+                continue
+            if 18 <= age <= 99:
+                return age
+        return None
 
     def _extract_duration_minutes(self, text: str) -> int | None:
         lower = text.lower()
