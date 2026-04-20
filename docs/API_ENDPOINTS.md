@@ -42,6 +42,7 @@ Notes:
   - Applies anti-hallucination guards for booking collection: tool updates are rejected when a field is out-of-order or value is not supported by current inbound client text.
   - One-on-one confirmation parser accepts short positive replies (`ok`, `okay`, `fine`) to prevent repeated re-asking.
   - Incall address is shared at final confirmation summary stage, not immediately after incall selection.
+  - When inbound media is present, attachment context is injected into runtime inbound text so Alysha can respond naturally to image-only messages.
 - `POST /agent/send-message`
   - Internal endpoint for deterministic outbound dispatch.
 
@@ -78,6 +79,8 @@ Notes:
 
 - Primary mobile path:
   - `POST /worker/messages`
+    - Relay intent is agent-mediated: worker instruction is rewritten by runtime into natural Alysha client-facing text before Twilio send.
+    - Free-form worker chat is also routed through the agent runtime so short greetings return an Alysha-style reply instead of the old canned helper text.
   - `GET /events/worker/stream`
 - Optional direct action routes (kept for compatibility):
   - `GET /worker/bookings/upcoming`
@@ -143,7 +146,11 @@ Example relay action entry:
 
 - `POST /media/twilio/ingest`
   - Returns enriched media metadata (`booking_id`, `channel`, `media_type`, `twilio_media_sid`, `is_receipt`, `source_url`).
+  - Media file is fetched from Twilio and stored locally under backend `media/<client_phone>/...` when retrieval succeeds.
 - `GET /admin/bookings/{booking_id}/media`
+  - Prefers local served media URL when `storage_url` exists.
+- `GET /admin/media/{media_id}/content`
+  - Streams locally stored media file for admin panel rendering.
 - `POST /admin/media/{media_id}/mark-receipt`
 
 ## Notification APIs

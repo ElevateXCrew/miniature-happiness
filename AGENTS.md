@@ -12,7 +12,10 @@
 - One-on-one confirmation parsing now accepts short confirmations like `ok/okay/fine` to avoid repeated alone-policy re-asks.
 - Collection tone hardening is active: booking collection starts with a soft consent line before ordered questions.
 - Incall address timing rule is enforced: address is shared in final confirmation summary, not immediately after incall selection.
-- Worker mobile chat-first execution is active: `POST /worker/messages` now supports query, command, and client relay intents with structured `executed_actions` in response.
+- Worker mobile client-relay now routes through agent runtime so client-facing text is Alysha-natural instead of raw relay text.
+- Twilio inbound media is now downloaded and stored under backend `media/<client_phone>/...`, and admin panel media list prefers served local copies.
+- Image-aware inbound guard is active: when media arrives, runtime receives attachment context in inbound text so Alysha can respond naturally.
+- Worker mobile chat-first execution is active: `POST /worker/messages` now supports query, command, client relay, and free-form agent chat intents with structured `executed_actions` in response.
 - Worker realtime stream now carries worker-targeted chat and operation updates (`worker.chat_reply`, `worker.operation.completed`) plus worker-owned booking lifecycle updates.
 - Current backend verification snapshot: 62 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.
