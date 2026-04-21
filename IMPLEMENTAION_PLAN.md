@@ -19,6 +19,7 @@ This file is the single execution source of truth for project planning.
 - Duration persistence guard is active: default availability check duration is not persisted into draft booking unless duration was explicitly stated by client inbound text.
 - Advisory booking guard tool is active: runtime exposes a pre-check tool for field updates, while hard server-side enforcement remains mandatory on actual field mutation.
 - Post-decision continuity guard is active: after admin booking decisions clear active draft linkage, runtime uses latest session booking status replies to avoid false "lost draft" prompts and collection restarts.
+- Two-step collection guard is active: once availability has captured date/time, runtime enforces booking consent prompt, then one bulk message for remaining required fields, then one-by-one prompts only for any missing required fields.
 
 ## Scope Locks (Agreed)
 
@@ -48,6 +49,7 @@ This file is the single execution source of truth for project planning.
   - Age capture only accepts explicit age statements and rejects inferred numeric values from unrelated text.
   - One-on-one confirmations accept short replies like `ok/okay/fine` to avoid repeated prompts.
   - Incall address is sent at final confirmation stage (not immediately after booking type selection).
+  - Runtime enforces a strict two-step booking intake after availability: consent question first, then one bulk request for remaining required details before one-by-one missing-field recovery.
 - Worker mobile chat relay:
   - Worker `POST /worker/messages` relay intent now generates client-facing text through agent runtime, not raw passthrough text.
 - Media behavior:

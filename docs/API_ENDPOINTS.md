@@ -41,6 +41,7 @@ Notes:
   - Enforces booking-intent gate before availability checks can start collection when no active draft exists.
   - Preserves duration collection order by not persisting default availability pre-check duration unless inbound client text explicitly includes duration.
   - Applies deterministic pre-capture for the next required booking field from inbound text before LLM generation to reduce repeated follow-up questions.
+  - Enforces strict two-step booking intake after availability date/time exists: consent prompt first, then one bulk request for remaining required details, then one-by-one follow-up only for missing required fields.
   - Applies anti-hallucination guards for booking collection: tool updates are rejected when a field is out-of-order or value is not supported by current inbound client text.
   - Exposes advisory pre-check tool `advisory_check_booking_field_update` for model planning, while keeping hard enforcement on `update_booking_field` before any persistence.
   - Applies post-decision continuity guard: if active draft linkage is cleared by admin decision transitions, runtime responds from latest session booking status rather than re-entering draft collection with a "lost draft" prompt.

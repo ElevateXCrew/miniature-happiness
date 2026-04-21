@@ -14,6 +14,7 @@
 - Age capture hardening is active: client age is only accepted from explicit age statements (not inferred from unrelated numbers like times).
 - One-on-one confirmation parsing now accepts short confirmations like `ok/okay/fine` to avoid repeated alone-policy re-asks.
 - Collection tone hardening is active: booking collection starts with a soft consent line before ordered questions.
+- Two-step collection flow hardening is active: when date/time is already captured via availability, runtime now enforces consent prompt first, then one bulk request for remaining required fields, then one-by-one prompts only for missing fields.
 - Interest gate hardening is active: runtime now rejects availability checks when no active draft exists and the client's inbound message does not clearly express booking intent.
 - Duration collection hardening is active: availability pre-check defaults no longer auto-fill booking duration unless the client explicitly provided duration in inbound text.
 - Incall address timing rule is enforced: address is shared in final confirmation summary, not immediately after incall selection.
