@@ -100,13 +100,6 @@ class ClientRuntimeService:
         inbound_text: str,
         attached_media_count: int,
     ) -> AgentReply:
-        if channel == Channel.WHATSAPP and attached_media_count > 0:
-            return await self._generate_media_ack_reply(
-                session_id=session_id,
-                channel=channel,
-                inbound_text=inbound_text,
-            )
-
         if channel == Channel.SMS and attached_media_count > 0:
             return AgentReply(
                 text="Can you send that receipt on WhatsApp on this same number, babe?",
@@ -122,23 +115,35 @@ class ClientRuntimeService:
 
         if settings.openai_api_key.strip():
             try:
-                return await self._generate_llm_reply(
+                reply = await self._generate_llm_reply(
                     session_id=session_id,
                     client_id=client_id,
                     worker_id=worker_id,
                     channel=channel,
                     inbound_text=inbound_text,
                 )
+                if channel == Channel.WHATSAPP and attached_media_count > 0:
+                    return AgentReply(
+                        text=self._ensure_media_ack_in_reply(reply.text),
+                        tool_traces=reply.tool_traces,
+                    )
+                return reply
             except Exception as exc:
                 logger.warning("LLM orchestration failed, falling back", error=str(exc))
 
-        return await self._generate_fallback_reply(
+        fallback_reply = await self._generate_fallback_reply(
             session_id=session_id,
             client_id=client_id,
             worker_id=worker_id,
             channel=channel,
             inbound_text=inbound_text,
         )
+        if channel == Channel.WHATSAPP and attached_media_count > 0:
+            return AgentReply(
+                text=self._ensure_media_ack_in_reply(fallback_reply.text),
+                tool_traces=fallback_reply.tool_traces,
+            )
+        return fallback_reply
 
     async def generate_admin_decision_reply(
         self,
@@ -208,62 +213,20 @@ class ClientRuntimeService:
             return admin_reply
         return AgentReply(text="Got it babe, I'll update you shortly 😊", tool_traces=[])
 
-    async def _generate_media_ack_reply(
-        self,
-        *,
-        session_id: uuid.UUID,
-        channel: Channel,
-        inbound_text: str,
-    ) -> AgentReply:
-        if not settings.openai_api_key.strip():
-            return AgentReply(
-                text="I have received your photo/screenshot babe 😊",
-                tool_traces=[],
-            )
-
-        try:
-            session = await self.sessions.get_by_id(session_id)
-            booking_context = (
-                await self._build_booking_context_block(session) if session is not None else None
-            )
-            system_prompt = self._load_channel_prompt(channel, extra_context=booking_context)
-            history = await self.messages.list_for_session(session_id)
-
-            chat_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-            for msg in history[-10:]:
-                role = "user" if msg.direction == MessageDirection.INBOUND else "assistant"
-                chat_messages.append({"role": role, "content": msg.body or ""})
-
-            chat_messages.append(
-                {
-                    "role": "system",
-                    "content": (
-                        "[SYSTEM — internal only] The client just sent media in this turn. "
-                        "Your reply MUST explicitly acknowledge receiving the "
-                        "photo/screenshot in Alysha's natural voice. "
-                        "If the client also asked something, answer briefly after "
-                        "the acknowledgement. Keep it to 1-2 lines."
-                    ),
-                }
-            )
-            chat_messages.append({"role": "user", "content": inbound_text})
-
-            client = self._get_openai_client()
-            completion = await cast(Any, client.chat.completions).create(
-                model=settings.openai_model,
-                temperature=0.2,
-                messages=chat_messages,
-            )
-            content = (completion.choices[0].message.content or "").strip()
-            if content:
-                return AgentReply(text=self._ensure_short_style(content), tool_traces=[])
-        except Exception as exc:
-            logger.warning("Media acknowledgement LLM generation failed", error=str(exc))
-
-        return AgentReply(
-            text="I have received your photo/screenshot babe 😊",
-            tool_traces=[],
+    def _ensure_media_ack_in_reply(self, text: str) -> str:
+        lowered = (text or "").lower()
+        ack_markers = (
+            "received",
+            "got your",
+            "got it",
+            "photo",
+            "screenshot",
+            "image",
+            "receipt",
         )
+        if any(marker in lowered for marker in ack_markers):
+            return text
+        return f"I have received your photo/screenshot babe 😊\n{text}" if text else "I have received your photo/screenshot babe 😊"
 
     async def _generate_llm_reply(
         self,
