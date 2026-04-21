@@ -33,6 +33,7 @@ The assistant should gather all required booking details through a normal conver
 
 Collection style requirement:
 - Begin with a soft consent line such as: "Babe, I need a few details to confirm your booking, if you don't mind."
+- If booking intent is not clear yet, ask a soft intent-check first and do not start field collection.
 - Then ask one detail at a time in strict order.
 
 Typical details include:
@@ -51,6 +52,7 @@ Typical details include:
 
 The assistant should only ask for what is missing and avoid repeating questions unnecessarily.
 It must not invent or auto-fill missing values that the client did not provide in the current turn.
+It must always ask duration after booking type when duration was not explicitly provided.
 
 ---
 
@@ -76,6 +78,8 @@ The system should:
 - acknowledge them naturally
 - make them visible to the admin
 - fetch media from Twilio and store local copies by client phone folder for reliable admin rendering
+- show all saved media in the admin Media section grouped by client phone number
+- keep new inbound media under the same client number grouping
 - pass attachment context into agent runtime so image-only messages still get natural Alysha responses
 
 ---

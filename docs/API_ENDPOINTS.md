@@ -38,6 +38,8 @@ Notes:
   - Internal endpoint for normalized inbound events.
   - Returns `duplicate` and `replayed` flags for idempotent/replay-safe inbound handling.
   - Enforces deterministic booking persistence guards: successful availability checks ensure a draft booking is linked to the active session, and explicit client confirmation cannot progress without a persisted draft.
+  - Enforces booking-intent gate before availability checks can start collection when no active draft exists.
+  - Preserves duration collection order by not persisting default availability pre-check duration unless inbound client text explicitly includes duration.
   - Applies deterministic pre-capture for the next required booking field from inbound text before LLM generation to reduce repeated follow-up questions.
   - Applies anti-hallucination guards for booking collection: tool updates are rejected when a field is out-of-order or value is not supported by current inbound client text.
   - Age extraction accepts only explicit age statements (for example "I am 24" / "24 years old") to avoid inferred values from unrelated numbers.
@@ -53,6 +55,8 @@ Notes:
 - `GET /admin/bookings/{booking_id}`
   - Includes `media_count` and `has_receipt` flags in booking detail payload.
 - `GET /admin/bookings/{booking_id}/timeline`
+- `GET /admin/media`
+  - Returns all saved media entries with client phone metadata for admin media gallery grouping.
 - `POST /admin/bookings/{booking_id}/approve`
 - `POST /admin/bookings/{booking_id}/reject`
 - `POST /admin/bookings/{booking_id}/cancel`

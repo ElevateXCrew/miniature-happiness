@@ -5,21 +5,22 @@
 1. Inbound message arrives on SMS/WhatsApp webhook.
 2. Normalize phone, resolve client, load active session.
 3. Agent sends short natural response (Alysha persona).
-4. On booking intent, create/update draft booking.
-5. Collect required fields in strict order: datetime -> booking type -> duration -> outcall address(if outcall) -> age -> ethnicity -> size -> alone policy.
-6. Start collection with a soft consent line before ordered questions.
-7. Before LLM generation, runtime pre-captures the next required field from inbound text when possible.
-8. Runtime blocks out-of-order/hallucinated field saves unless the value is present in current inbound text.
-8a. Age is captured only from explicit age statements; runtime does not infer age from unrelated numeric text.
-9. Run availability tool before confirming proposed slot.
-10. Persist/link a draft booking to the active session when availability succeeds (deterministic guard).
-11. Summarize details and request explicit confirmation.
-12. For incall, include address only in final confirmation summary (not immediately after booking type).
-13. On explicit yes (including short confirmations like ok/okay/fine where applicable), move to `PENDING_REVIEW` and notify admin + worker.
-14. Tell client to wait briefly.
-15. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
-16. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
-17. Finalize state and emit admin sync events.
+4. If booking intent is unclear, keep chat natural and do not start collection tools yet.
+5. On clear booking intent, create/update draft booking.
+6. Collect required fields in strict order: datetime -> booking type -> duration -> outcall address(if outcall) -> age -> ethnicity -> size -> alone policy.
+7. Start collection with a soft consent line before ordered questions.
+8. Before LLM generation, runtime pre-captures the next required field from inbound text when possible.
+9. Runtime blocks out-of-order/hallucinated field saves unless the value is present in current inbound text.
+9a. Age is captured only from explicit age statements; runtime does not infer age from unrelated numeric text.
+10. Run availability tool before confirming proposed slot.
+11. Persist/link a draft booking to the active session when availability succeeds (deterministic guard), but keep duration empty unless client explicitly provided it.
+12. Summarize details and request explicit confirmation.
+13. For incall, include address only in final confirmation summary (not immediately after booking type).
+14. On explicit yes (including short confirmations like ok/okay/fine where applicable), move to `PENDING_REVIEW` and notify admin + worker.
+15. Tell client to wait briefly.
+16. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
+17. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
+18. Finalize state and emit admin sync events.
 
 ## 2) Outcall Flow with Advance and Receipt
 
@@ -31,6 +32,14 @@
 5a. Fetch media from Twilio URL and store local copy under backend `media/<client_phone>/...`.
 6. Mark receipt and expose in admin panel.
 7. Continue to review stage.
+
+## 2a) Admin Media Gallery Grouping
+
+1. Admin opens Media section in panel.
+2. Frontend calls `GET /admin/media`.
+3. Backend returns all saved media rows with client phone metadata.
+4. UI groups media by `client_phone_e164` and renders each group under that phone number.
+5. New inbound media for an existing client appears under that same phone group on refresh.
 
 ## 3) Worker Client Relay (Mobile)
 

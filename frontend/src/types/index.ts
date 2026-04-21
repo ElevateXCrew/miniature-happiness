@@ -111,10 +111,14 @@ export interface TimelineResponse {
 
 export interface MediaItem {
   id: string;
-  booking_id: string;
+  client_id: string;
+  client_phone_e164: string | null;
+  booking_id: string | null;
+  session_id: string;
   channel: string;
-  media_type: string;
+  media_type: string | null;
   source_url: string | null;
+  storage_url?: string | null;
   is_receipt: boolean;
   created_at: string;
 }

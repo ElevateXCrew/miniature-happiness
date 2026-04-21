@@ -85,6 +85,48 @@ async def get_booking_media(
     ]
 
 
+@router.get("/admin/media")
+async def list_all_media(
+    offset: int = 0,
+    limit: int = 200,
+    _: object = Depends(require_role(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    from sqlalchemy import select
+
+    from app.models.booking_media import BookingMedia
+    from app.models.client import Client
+
+    stmt = (
+        select(BookingMedia, Client.phone_e164)
+        .join(Client, BookingMedia.client_id == Client.id)
+        .order_by(BookingMedia.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        {
+            "id": str(media.id),
+            "client_id": str(media.client_id),
+            "client_phone_e164": phone_e164,
+            "booking_id": str(media.booking_id) if media.booking_id else None,
+            "session_id": str(media.session_id),
+            "channel": media.channel.value,
+            "media_type": media.media_type,
+            "source_url": (
+                f"/admin/media/{media.id}/content" if media.storage_url else media.source_url
+            ),
+            "storage_url": media.storage_url,
+            "is_receipt": media.is_receipt,
+            "created_at": media.created_at.isoformat(),
+        }
+        for media, phone_e164 in rows
+    ]
+
+
 @router.get("/admin/media/{media_id}/content")
 async def get_media_content(
     media_id: uuid.UUID,

@@ -33,6 +33,8 @@ from app.tools.tool_runner import ToolRunner
 _BOOKING_INTENT_TERMS = {
     "book",
     "booking",
+    "interested",
+    "interest",
     "see you",
     "appointment",
     "meet",
@@ -439,6 +441,18 @@ class ClientRuntimeService:
         if name == "check_availability":
             # Always enforce server-trusted worker identity and ignore model-provided values.
             patch_args["worker_id"] = str(worker_id)
+            session = await self.sessions.get_active_for_client_worker(client_id, worker_id)
+            has_active_draft = bool(
+                session is not None and session.active_booking_id is not None
+            )
+            if not has_active_draft and not self._has_booking_intent(inbound_text or ""):
+                return {
+                    "ok": False,
+                    "error": (
+                        "Check availability only after the client clearly shows booking intent. "
+                        "Keep it conversational first."
+                    ),
+                }
 
         # Guard: if the LLM passed a non-UUID booking_id (e.g. "DRAFT"), resolve
         # the real active draft for this client/worker and substitute it in.
@@ -502,6 +516,7 @@ class ClientRuntimeService:
                 client_id=client_id,
                 worker_id=worker_id,
                 tool_args=patch_args,
+                inbound_text=inbound_text or "",
             )
 
         if result.get("ok"):
@@ -642,25 +657,59 @@ class ClientRuntimeService:
         client_id: uuid.UUID,
         worker_id: uuid.UUID,
         tool_args: dict[str, Any],
+        inbound_text: str,
     ) -> None:
         session = await self.sessions.get_active_for_client_worker(client_id, worker_id)
         if session is None:
             return
 
+        start_at = self._parse_tool_datetime(tool_args.get("start_at"))
+        tool_duration = self._parse_tool_duration(tool_args.get("duration_minutes"))
+        extracted_duration = self._extract_duration_minutes(inbound_text)
+        persisted_duration = (
+            tool_duration if extracted_duration is not None and tool_duration is not None else None
+        )
+
         if session.active_booking_id is not None:
             active_booking = await self.bookings.get_by_id(session.active_booking_id)
             if active_booking is not None:
+                updated = False
+                if active_booking.scheduled_start_at is None and start_at is not None:
+                    active_booking.scheduled_start_at = start_at
+                    updated = True
+                if active_booking.duration_minutes is None and persisted_duration is not None:
+                    active_booking.duration_minutes = persisted_duration
+                    if active_booking.scheduled_start_at is not None:
+                        active_booking.scheduled_end_at = (
+                            active_booking.scheduled_start_at
+                            + timedelta(minutes=persisted_duration)
+                        )
+                    updated = True
+                if updated:
+                    await self.bookings.save(active_booking)
                 return
 
         existing_draft = await self.bookings.get_active_draft_for_session(session.id)
         if existing_draft is not None:
             session.active_booking_id = existing_draft.id
             await self.sessions.update(session)
+            updated = False
+            if existing_draft.scheduled_start_at is None and start_at is not None:
+                existing_draft.scheduled_start_at = start_at
+                updated = True
+            if existing_draft.duration_minutes is None and persisted_duration is not None:
+                existing_draft.duration_minutes = persisted_duration
+                if existing_draft.scheduled_start_at is not None:
+                    existing_draft.scheduled_end_at = (
+                        existing_draft.scheduled_start_at
+                        + timedelta(minutes=persisted_duration)
+                    )
+                updated = True
+            if updated:
+                await self.bookings.save(existing_draft)
             return
 
-        start_at = self._parse_tool_datetime(tool_args.get("start_at"))
-        duration = self._parse_tool_duration(tool_args.get("duration_minutes"))
-        if start_at is None or duration is None:
+        if start_at is None:
             return
 
         booking = Booking(
@@ -669,8 +718,12 @@ class ClientRuntimeService:
             session_id=session.id,
             status=BookingStatus.DRAFT,
             scheduled_start_at=start_at,
-            duration_minutes=duration,
-            scheduled_end_at=start_at + timedelta(minutes=duration),
+            duration_minutes=persisted_duration,
+            scheduled_end_at=(
+                start_at + timedelta(minutes=persisted_duration)
+                if persisted_duration is not None
+                else None
+            ),
         )
         await self.bookings.save(booking)
 
@@ -796,6 +849,14 @@ class ClientRuntimeService:
         if any(term in lowered for term in outcall_terms):
             return BookingType.OUTCALL
         return None
+
+    def _has_booking_intent(self, text: str) -> bool:
+        lowered = (text or "").strip().lower()
+        if not lowered:
+            return False
+        if self._is_smalltalk_or_greeting(lowered):
+            return False
+        return any(term in lowered for term in _BOOKING_INTENT_TERMS)
 
     async def _override_redundant_prompt_for_booking(
         self,
@@ -1312,14 +1373,18 @@ class ClientRuntimeService:
         lines.append("[Your booking records for this client]:")
         lines.extend(records)
         collection_order = (
-            "DATE -> BOOKING TYPE -> DURATION -> NAME (optional) -> AGE -> "
-            "ETHNICITY -> SIZE -> ALONE POLICY -> FINAL CONFIRMATION"
+            "DATE -> BOOKING TYPE -> DURATION -> OUTCALL ADDRESS (if outcall) -> "
+            "AGE -> ETHNICITY -> SIZE -> ALONE POLICY -> FINAL CONFIRMATION"
         )
         lines.append(
             "\nSTAY IN CHARACTER: You are Alysha (real person, not a bot). "
             "Never mention checking, validation, collection, or system terms."
             "\n✓ FIELD ORDER: Ask fields in this exact order: " + collection_order + "."
+            "\n✓ INTEREST GATE: If no active draft exists, keep chat natural and only start "
+            "collecting after the client clearly shows booking intent."
             "\n✓ SKIP FIELDS: NEVER ask for a field that already shows a value above."
+            "\n✓ DURATION RULE: Always ask and confirm duration after booking type unless "
+            "the client explicitly provided duration in their current message."
             "\n✓ AFTER ALL FIELDS COLLECTED: Send a warm confirmation summary with all "
             "details. Do not ask 'shall I proceed?'; send confirmation and wait for YES."
             "\n✓ INCALL ADDRESS: Do not share the incall address until sending the "
