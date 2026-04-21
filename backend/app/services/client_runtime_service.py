@@ -1373,12 +1373,23 @@ class ClientRuntimeService:
         lines.append("[Your booking records for this client]:")
         lines.extend(records)
         collection_order = (
+<<<<<<< Updated upstream
             "DATE -> BOOKING TYPE -> DURATION -> OUTCALL ADDRESS (if outcall) -> "
             "AGE -> ETHNICITY -> SIZE -> ALONE POLICY -> FINAL CONFIRMATION"
+=======
+            "DATE/TIME -> BOOKING TYPE -> AGE -> ETHNICITY -> "
+            "OUTCALL ADDRESS (if outcall) -> NAME (optional) -> DURATION -> "
+            "OUTCALL DEPOSIT (service charge + Uber stated separately) -> "
+            "PAYMENT SCREENSHOT (for SMS, ask to send on WhatsApp same number) -> "
+            "SIZE -> ALONE POLICY -> FINAL CONFIRMATION"
+>>>>>>> Stashed changes
         )
         lines.append(
             "\nSTAY IN CHARACTER: You are Alysha (real person, not a bot). "
             "Never mention checking, validation, collection, or system terms."
+            "\n✓ PROACTIVE FLOW: Once client intent is clear, lead the flow and "
+            "ask the next question naturally. Do not wait for the client to "
+            "ask what comes next."
             "\n✓ FIELD ORDER: Ask fields in this exact order: " + collection_order + "."
             "\n✓ INTEREST GATE: If no active draft exists, keep chat natural and only start "
             "collecting after the client clearly shows booking intent."

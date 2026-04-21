@@ -153,28 +153,29 @@ class ToolRunner:
         # rather than stopping with an acknowledgement like "Thank you".
         next_field = svc.get_next_required_field(booking) if booking else None
         _FIELD_QUESTION: dict[str, str] = {
-            # Step 1 → Step 2: After date/time, ask booking type
+            # Proactively lead: once intent is clear, ask the next required detail.
+            # Step 1 -> Step 2: After date/time, ask booking type
             "scheduled_start_at": (
                 "Start gently: 'Babe I need a few details to confirm booking, if you do not mind.' "
-                "Then ask booking type (incall or outcall)."
+                "Then proactively ask booking type (incall or outcall)."
             ),
-            # Step 2 → Step 3: After booking type, ask duration
-            "booking_type": "Ask for the duration they want.",
-            # Step 3 → Step 4 (if outcall) or Step 5 (if incall): Ask for address (outcall only)
+            # After booking type, continue collection naturally.
+            "booking_type": "Ask for the duration they want, naturally and proactively.",
+            # Outcall only: address is required once duration is set.
             "outcall_address": "Ask for their address or area.",
-            # Step 3 or 4 → Step 5: Ask for name (optional, can skip)
+            # Optional name can be collected conversationally.
             "duration_minutes": "Ask for their name (optional, they can skip).",
-            # Step 5 → Step 6: After name, ask age
+            # Continue required screening fields.
             "client_name": "Ask for their age.",
-            # Step 6 → Step 7: After age, ask ethnicity
             "client_age": "Ask for their ethnicity.",
-            # Step 7 → Step 7b: After ethnicity, ask size
             "client_ethnicity": "Ask for their size.",
-            # Step 7b → Step 8: After size, ask about alone policy
             "client_size_inches": "Ask if they'll be alone (you only do one-on-one).",
-            # Step 8 → Final confirmation: All fields done, send confirmation summary
+            # After required fields: include outcall payment flow before confirmation.
             "alone_policy_confirmed": (
                 "All required fields are now collected. "
+                "If this is an outcall, clearly state service charge and Uber charges separately, "
+                "request the 50 GBP deposit, and ask for deposit screenshot. "
+                "If channel is SMS, ask them to send the screenshot on WhatsApp using the same number. "
                 "Send a warm confirmation summary with all booking details. "
                 "Do NOT ask 'shall I proceed?'. "
                 "Present the confirmation and wait for their YES."
@@ -183,6 +184,9 @@ class ToolRunner:
         if next_field is None:
             next_instruction = (
                 "All required fields are now collected. "
+                "If this is an outcall, clearly state service charge and Uber charges separately, "
+                "request the 50 GBP deposit, and ask for deposit screenshot. "
+                "If channel is SMS, ask them to send the screenshot on WhatsApp using the same number. "
                 "Send a warm confirmation summary with all booking details. "
                 "Do NOT ask 'shall I proceed?'. "
                 "Present the confirmation and wait for their YES."
