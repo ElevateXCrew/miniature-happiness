@@ -184,7 +184,9 @@ async def test_twilio_whatsapp_with_media_sends_ack_and_marks_receipt(
     assert "received" in (outbound.body or "").lower()
     assert "photo" in (outbound.body or "").lower() or "screenshot" in (outbound.body or "").lower()
 
-    media_result = await db.execute(select(BookingMedia).where(BookingMedia.twilio_media_sid == "ME_TEST_WA_001"))
+    media_result = await db.execute(
+        select(BookingMedia).where(BookingMedia.twilio_media_sid == "ME_TEST_WA_001")
+    )
     media = media_result.scalar_one_or_none()
     assert media is not None
     assert media.is_receipt is True
@@ -472,6 +474,66 @@ async def test_pre_capture_required_field_from_inbound_updates_age(
 
 
 @pytest.mark.asyncio
+async def test_pre_capture_bulk_outcall_message_captures_address_and_ethnicity(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        scheduled_start_at=start_at,
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    await runtime._pre_capture_required_field_from_inbound(
+        session_id=session.id,
+        inbound_text=(
+            "Outcall: central bermighem streat 5 house 20\n"
+            "duration: 1hr\n"
+            "age: 21\n"
+            "ethnicity: asian\n"
+            "size: 4"
+        ),
+    )
+
+    refreshed_booking = await db.get(Booking, booking.id)
+    assert refreshed_booking is not None
+    assert refreshed_booking.booking_type == BookingType.OUTCALL
+    assert (refreshed_booking.outcall_address or "").lower().startswith("central")
+    assert refreshed_booking.duration_minutes == 60
+    assert refreshed_booking.client_age == 21
+    assert refreshed_booking.client_ethnicity is not None
+    assert "asian" in refreshed_booking.client_ethnicity.lower()
+    assert refreshed_booking.client_size_inches == 4
+    assert (
+        runtime.booking_service.get_next_required_field(refreshed_booking)
+        == "alone_policy_confirmed"
+    )
+
+
+@pytest.mark.asyncio
 async def test_pre_capture_alone_policy_accepts_ok_reply(
     db: AsyncSession,
 ) -> None:
@@ -705,6 +767,150 @@ async def test_llm_yes_when_awaiting_confirmation_submits_without_recent_prompt_
     refreshed_booking = await db.get(Booking, booking.id)
     assert refreshed_booking is not None
     assert refreshed_booking.status == BookingStatus.PENDING_REVIEW
+
+
+@pytest.mark.asyncio
+async def test_two_step_flow_asks_consent_before_bulk_collection(db: AsyncSession) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._handle_two_step_collection_flow(
+        session_id=session.id,
+        inbound_text="I want to book",
+        history=[],
+    )
+
+    assert reply is not None
+    assert reply.text == "I need to collect some information for the booking, if you don't mind?"
+
+
+@pytest.mark.asyncio
+async def test_two_step_flow_sends_bulk_request_after_consent_yes(db: AsyncSession) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    consent_message = Message(
+        session_id=session.id,
+        direction=MessageDirection.OUTBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.AGENT,
+        body="I need to collect some information for the booking, if you don't mind?",
+    )
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._handle_two_step_collection_flow(
+        session_id=session.id,
+        inbound_text="yes",
+        history=[consent_message],
+    )
+
+    assert reply is not None
+    assert "send these in one message" in reply.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_two_step_flow_asks_missing_field_one_by_one_after_bulk_prompt(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    bulk_message = Message(
+        session_id=session.id,
+        direction=MessageDirection.OUTBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.AGENT,
+        body=(
+            "Perfect babe. Send these in one message: booking type (incall or outcall), "
+            "duration, age, ethnicity, size, and confirm it'll be just you."
+        ),
+    )
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._handle_two_step_collection_flow(
+        session_id=session.id,
+        inbound_text="I am 27 and Asian",
+        history=[bulk_message],
+    )
+
+    assert reply is not None
+    assert "incall or outcall" in reply.text.lower()
 
 
 @pytest.mark.asyncio

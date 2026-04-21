@@ -43,6 +43,7 @@ _BOOKING_INTENT_TERMS = {
     "slot",
 }
 _YES_TERMS = {"yes", "y", "yeah", "yep", "confirm", "go ahead", "ok", "okay"}
+_BOOKING_CONSENT_PROMPT = "I need to collect some information for the booking, if you don't mind?"
 
 
 @dataclass
@@ -290,6 +291,14 @@ class ClientRuntimeService:
         system_prompt = self._load_channel_prompt(channel, extra_context=booking_context)
         history = await self.messages.list_for_session(session_id)
 
+        staged_reply = await self._handle_two_step_collection_flow(
+            session_id=session_id,
+            inbound_text=inbound_text,
+            history=history,
+        )
+        if staged_reply is not None:
+            return staged_reply
+
         confirm_reply = await self._handle_llm_confirmation_reply(
             session_id=session_id,
             inbound_text=inbound_text,
@@ -402,6 +411,101 @@ class ClientRuntimeService:
         return AgentReply(
             text="I can help with that babe. What date and time did you want?",
             tool_traces=tool_traces,
+        )
+
+    async def _handle_two_step_collection_flow(
+        self,
+        *,
+        session_id: uuid.UUID,
+        inbound_text: str,
+        history: list[Any],
+    ) -> AgentReply | None:
+        """
+        Enforce booking collection sequence:
+        1) Consent prompt
+        2) Single bulk info request
+        3) Missing fields one-by-one
+        """
+        session = await self.sessions.get_by_id(session_id)
+        if session is None or session.active_booking_id is None:
+            return None
+
+        booking = await self.bookings.get_by_id(session.active_booking_id)
+        if booking is None or booking.status != BookingStatus.DRAFT:
+            return None
+
+        # Initial availability stage should already have date/time before booking.
+        if booking.scheduled_start_at is None:
+            return None
+
+        lowered = inbound_text.strip().lower()
+        consent_recent = self._was_recent_booking_consent_prompt(history)
+        bulk_recent = self._was_recent_bulk_info_prompt(history)
+
+        if self._has_booking_intent(inbound_text) and not consent_recent and not bulk_recent:
+            return AgentReply(text=_BOOKING_CONSENT_PROMPT, tool_traces=[])
+
+        if consent_recent:
+            if any(token in lowered for token in _YES_TERMS):
+                return AgentReply(
+                    text=self._build_bulk_info_request_message(booking),
+                    tool_traces=[],
+                )
+            return AgentReply(
+                text="No worries babe. Tell me when you want to continue booking 😊",
+                tool_traces=[],
+            )
+
+        if not bulk_recent:
+            return None
+
+        latest_booking = await self.bookings.get_by_id(booking.id)
+        if latest_booking is None:
+            return None
+
+        next_field = self.booking_service.get_next_required_field(latest_booking)
+        if next_field is None:
+            return None
+
+        if self._is_smalltalk_or_greeting(inbound_text):
+            return None
+
+        return AgentReply(text=self._question_for_field(next_field), tool_traces=[])
+
+    def _was_recent_booking_consent_prompt(self, history: list[Any]) -> bool:
+        needle = _BOOKING_CONSENT_PROMPT.lower()
+        for msg in reversed(history[-4:]):
+            if msg.direction != MessageDirection.OUTBOUND:
+                continue
+            body = (msg.body or "").strip().lower()
+            return needle in body
+        return False
+
+    def _was_recent_bulk_info_prompt(self, history: list[Any]) -> bool:
+        markers = (
+            "send these in one message",
+            "booking type (incall or outcall)",
+            "confirm it'll be just you",
+        )
+        for msg in reversed(history[-4:]):
+            if msg.direction != MessageDirection.OUTBOUND:
+                continue
+            body = (msg.body or "").strip().lower()
+            return any(marker in body for marker in markers)
+        return False
+
+    def _build_bulk_info_request_message(self, booking: Booking) -> str:
+        if booking.booking_type == BookingType.OUTCALL:
+            location_piece = "your full outcall address"
+        elif booking.booking_type == BookingType.INCALL:
+            location_piece = "(no address needed for incall)"
+        else:
+            location_piece = "if outcall, include your full address"
+
+        return (
+            "Perfect babe. Send these in one message: booking type (incall or outcall), "
+            "duration, age, ethnicity, size, and confirm it'll be just you. "
+            f"Also share {location_piece}."
         )
 
     async def _handle_llm_confirmation_reply(
@@ -897,13 +1001,28 @@ class ClientRuntimeService:
         if next_field is None:
             return
 
-        # Best-effort only: ignore parse/validation failures and let normal
-        # LLM+tool flow continue if no deterministic capture is possible.
-        _ = await self._attempt_field_capture(
-            booking_id=booking.id,
-            field_name=next_field,
-            text=inbound_text.strip(),
-        )
+        # Best-effort bulk capture: extract as many fields as possible from
+        # a single inbound message while still respecting required order.
+        text = inbound_text.strip()
+        if not text:
+            return
+
+        for _ in range(8):
+            latest_booking = await self.bookings.get_by_id(booking.id)
+            if latest_booking is None:
+                return
+
+            current_field = self.booking_service.get_next_required_field(latest_booking)
+            if current_field is None:
+                return
+
+            update_error = await self._attempt_field_capture(
+                booking_id=booking.id,
+                field_name=current_field,
+                text=text,
+            )
+            if update_error is not None:
+                return
 
     async def _handle_active_booking_status_guard(
         self,
@@ -1041,10 +1160,7 @@ class ClientRuntimeService:
 
     def _next_question_for_booking(self, booking: Booking) -> str:
         if booking.booking_type is None:
-            return (
-                "Babe I need a few details to confirm booking, if you do not mind. "
-                "Would you prefer incall or outcall?"
-            )
+            return "Would you prefer incall or outcall, babe?"
 
         next_field = self.booking_service.get_next_required_field(booking)
         if next_field is not None:
@@ -1246,7 +1362,7 @@ class ClientRuntimeService:
             return errors[0] if errors else None
 
         if field_name == "client_ethnicity":
-            value = text.strip()
+            value = self._extract_ethnicity(text)
             if not value:
                 return "Tell me your ethnicity please babe."
             _, errors = await self.booking_service.update_field(booking_id, field_name, value)
@@ -1271,7 +1387,7 @@ class ClientRuntimeService:
             return errors[0] if errors else None
 
         if field_name == "outcall_address":
-            value = text.strip()
+            value = self._extract_outcall_address(text)
             if len(value) < 4:
                 return "Share your area or full address for outcall babe."
             _, errors = await self.booking_service.update_field(booking_id, field_name, value)
@@ -1301,10 +1417,7 @@ class ClientRuntimeService:
         if field_name == "scheduled_start_at":
             return "What date and time do you want babe?"
         if field_name == "booking_type":
-            return (
-                "Babe I need a few details to confirm booking, if you do not mind. "
-                "Would you prefer incall or outcall?"
-            )
+            return "Would you prefer incall or outcall, babe?"
         if field_name == "outcall_address":
             return "Share your area or address for outcall babe."
         if field_name == "client_name":
@@ -1320,6 +1433,74 @@ class ClientRuntimeService:
         if field_name == "alone_policy_confirmed":
             return "It'll just be you, right babe? I only do one-on-one."
         return "Can you share that detail for me?"
+
+    def _extract_ethnicity(self, text: str) -> str | None:
+        lowered = text.lower()
+        labeled = re.search(r"\bethnicity\s*(?:is|:)?\s*([a-z][a-z\s\-/]{1,40})", lowered)
+        if labeled:
+            value = labeled.group(1).strip(" .,!?")
+            return value if value else None
+
+        known = (
+            "asian",
+            "british asian",
+            "white",
+            "black",
+            "mixed",
+            "arab",
+            "indian",
+            "pakistani",
+            "bangladeshi",
+            "chinese",
+        )
+        for token in known:
+            if token in lowered:
+                return token
+        return None
+
+    def _extract_outcall_address(self, text: str) -> str:
+        lowered = text.lower()
+        outcall_labeled = re.search(
+            r"\boutcall\s*[:\-]\s*(.+?)(?=(?:\b(?:duration|age|ethnicity|size|alone|name)\b\s*[:\-])|$)",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if outcall_labeled:
+            value = outcall_labeled.group(1).strip(" .,!?\n\t")
+            if len(value) >= 4:
+                return value
+
+        labeled = re.search(
+            r"\b(?:address|area|location)\s*(?:is|:)?\s*(.+)$",
+            text,
+            re.IGNORECASE,
+        )
+        if labeled:
+            return labeled.group(1).strip()
+
+        location_tokens = (
+            " road",
+            " street",
+            " st ",
+            " avenue",
+            " ave ",
+            "birmingham",
+            "manchester",
+            "london",
+            "postcode",
+            "flat",
+            "apartment",
+            "hotel",
+        )
+        if any(token in lowered for token in location_tokens):
+            return text.strip()
+
+        # When the flow is explicitly waiting for outcall address, accept a
+        # reasonably detailed free-text location line even without keywords.
+        compact = re.sub(r"\s+", " ", text).strip()
+        if len(compact) >= 10 and len(compact.split()) >= 3:
+            return compact
+        return ""
 
     def _extract_datetime(self, text: str) -> datetime | None:
         text = text.strip()
@@ -1365,6 +1546,14 @@ class ClientRuntimeService:
         return None
 
     def _extract_size_inches(self, text: str) -> int | None:
+        labeled = re.search(
+            r"\bsize\s*(?:is|:)?\s*(\d{1,2})\b",
+            text,
+            re.IGNORECASE,
+        )
+        if labeled:
+            return int(labeled.group(1))
+
         match = re.search(r"\b(\d{1,2})\b", text)
         if not match:
             return None
@@ -1372,24 +1561,19 @@ class ClientRuntimeService:
 
     def _extract_alone_policy(self, text: str) -> bool | None:
         lowered = text.strip().lower()
-        negative_tokens = ("no", "not alone", "friend", "friends", "we", "two", "group")
-        positive_tokens = (
-            "yes",
-            "y",
-            "ok",
-            "okay",
-            "fine",
-            "that's fine",
-            "thats fine",
-            "sure",
-            "alone",
-            "just me",
-            "only me",
-        )
+        negative_tokens = ("not alone", "friend", "friends", "group")
+        positive_phrases = ("that's fine", "thats fine", "just me", "only me")
 
         if any(token in lowered for token in negative_tokens):
             return False
-        if any(token in lowered for token in positive_tokens):
+
+        if re.search(r"\b(?:no|we|two|2)\b", lowered):
+            return False
+
+        if any(phrase in lowered for phrase in positive_phrases):
+            return True
+
+        if re.search(r"\b(?:yes|y|ok|okay|fine|sure|alone)\b", lowered):
             return True
         return None
 

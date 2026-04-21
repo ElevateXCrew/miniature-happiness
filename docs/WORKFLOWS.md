@@ -8,21 +8,23 @@
 4. If booking intent is unclear, keep chat natural and do not start collection tools yet.
 5. On clear booking intent, create/update draft booking.
 6. Collect required fields in strict order: datetime -> booking type -> duration -> outcall address(if outcall) -> age -> ethnicity -> size -> alone policy.
-7. Start collection with a soft consent line before ordered questions.
-8. Before LLM generation, runtime pre-captures the next required field from inbound text when possible.
-8a. Runtime may use advisory guard tool checks (`advisory_check_booking_field_update`) for planning, but advisory results never bypass mutation-time guard enforcement.
-9. Runtime blocks out-of-order/hallucinated field saves unless the value is present in current inbound text.
-9a. Age is captured only from explicit age statements; runtime does not infer age from unrelated numeric text.
-10. Run availability tool before confirming proposed slot.
-11. Persist/link a draft booking to the active session when availability succeeds (deterministic guard), but keep duration empty unless client explicitly provided it.
-12. Summarize details and request explicit confirmation.
-13. For incall, include address only in final confirmation summary (not immediately after booking type).
-14. On explicit yes (including short confirmations like ok/okay/fine where applicable), move to `PENDING_REVIEW` and notify admin + worker.
-15. Tell client to wait briefly.
-16. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
-17. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
-18. If client replies after decision and active draft has been cleared, runtime answers using latest session booking status (confirmed/rejected/cancelled) instead of restarting collection.
-19. Finalize state and emit admin sync events.
+7. Once availability date/time is already known and client asks to book, send mandatory consent prompt first.
+8. After consent, send one bulk request message for all remaining required details (plus optional name).
+9. If client bulk reply misses any required detail, ask only missing fields one by one in required order.
+10. Before LLM generation, runtime pre-captures required fields from inbound text when possible.
+10a. Runtime may use advisory guard tool checks (`advisory_check_booking_field_update`) for planning, but advisory results never bypass mutation-time guard enforcement.
+11. Runtime blocks out-of-order/hallucinated field saves unless the value is present in current inbound text.
+11a. Age is captured only from explicit age statements; runtime does not infer age from unrelated numeric text.
+12. Run availability tool before confirming proposed slot.
+13. Persist/link a draft booking to the active session when availability succeeds (deterministic guard), but keep duration empty unless client explicitly provided it.
+14. Summarize details and request explicit confirmation.
+15. For incall, include address only in final confirmation summary (not immediately after booking type).
+16. On explicit yes (including short confirmations like ok/okay/fine where applicable), move to `PENDING_REVIEW` and notify admin + worker.
+17. Tell client to wait briefly.
+18. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
+19. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
+20. If client replies after decision and active draft has been cleared, runtime answers using latest session booking status (confirmed/rejected/cancelled) instead of restarting collection.
+21. Finalize state and emit admin sync events.
 
 ## 2) Outcall Flow with Advance and Receipt
 
