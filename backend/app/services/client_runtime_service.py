@@ -1373,16 +1373,8 @@ class ClientRuntimeService:
         lines.append("[Your booking records for this client]:")
         lines.extend(records)
         collection_order = (
-<<<<<<< Updated upstream
             "DATE -> BOOKING TYPE -> DURATION -> OUTCALL ADDRESS (if outcall) -> "
             "AGE -> ETHNICITY -> SIZE -> ALONE POLICY -> FINAL CONFIRMATION"
-=======
-            "DATE/TIME -> BOOKING TYPE -> AGE -> ETHNICITY -> "
-            "OUTCALL ADDRESS (if outcall) -> NAME (optional) -> DURATION -> "
-            "OUTCALL DEPOSIT (service charge + Uber stated separately) -> "
-            "PAYMENT SCREENSHOT (for SMS, ask to send on WhatsApp same number) -> "
-            "SIZE -> ALONE POLICY -> FINAL CONFIRMATION"
->>>>>>> Stashed changes
         )
         lines.append(
             "\nSTAY IN CHARACTER: You are Alysha (real person, not a bot). "
