@@ -474,6 +474,8 @@ This section defines what future agents should optimize for when fixing bugs in 
 -   Do not bypass backend guards with prompt-only or frontend-only logic.
 -   Keep Alysha persona and short 1-2 line response style intact.
 -   Keep strict field order intact: `datetime -> age(18+) -> ethnicity -> duration -> name(optional)`.
+-   Advisory guard checks may be used for planning (`advisory_check_booking_field_update`), but hard backend enforcement on `update_booking_field` must always remain active.
+-   After admin decision transitions clear active draft linkage, client follow-up replies must continue from latest booking status context (confirmed/rejected/cancelled) and must not restart booking collection with a "lost draft" response.
 -   Preserve cross-channel identity by `clients.phone_e164`.
 -   Maintain worker section toggle behavior: hidden in UI and blocked in backend API when disabled.
 

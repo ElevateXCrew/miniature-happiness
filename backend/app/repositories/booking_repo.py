@@ -25,6 +25,15 @@ class BookingRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_latest_for_session(self, session_id: uuid.UUID) -> Booking | None:
+        result = await self.db.execute(
+            select(Booking)
+            .where(Booking.session_id == session_id)
+            .order_by(Booking.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def get_conflicting_bookings(
         self,
         worker_id: uuid.UUID,

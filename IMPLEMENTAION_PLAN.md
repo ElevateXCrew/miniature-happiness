@@ -17,6 +17,8 @@ This file is the single execution source of truth for project planning.
 - Runtime path separation is active via facades: worker mobile chat/relay uses worker runtime policy, while client inbound/admin decision messaging uses client runtime policy over shared deterministic core services.
 - Availability intent gating is active: runtime blocks availability checks from starting collection when no active draft exists and inbound text does not clearly indicate booking intent.
 - Duration persistence guard is active: default availability check duration is not persisted into draft booking unless duration was explicitly stated by client inbound text.
+- Advisory booking guard tool is active: runtime exposes a pre-check tool for field updates, while hard server-side enforcement remains mandatory on actual field mutation.
+- Post-decision continuity guard is active: after admin booking decisions clear active draft linkage, runtime uses latest session booking status replies to avoid false "lost draft" prompts and collection restarts.
 
 ## Scope Locks (Agreed)
 

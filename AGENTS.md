@@ -9,6 +9,8 @@
 - Admin Live Chat now supports explicit conversation-history clearing per session via admin-only action, with audit logging.
 - Collection anti-repeat guard is improved: runtime now pre-captures the next required field from inbound text before LLM generation to reduce duplicate re-asking.
 - Collection anti-hallucination guard is active: runtime now blocks out-of-order or unsupported `update_booking_field` saves unless the value is present in the current client inbound text.
+- Advisory guard tool is active: runtime now exposes `advisory_check_booking_field_update` for pre-checks while retaining hard server-side enforcement on `update_booking_field`.
+- Post-decision continuity guard is active: when admin confirms/rejects/cancels and active draft linkage is cleared, runtime now replies from latest session booking status instead of falling into a "lost booking draft" re-collection loop.
 - Age capture hardening is active: client age is only accepted from explicit age statements (not inferred from unrelated numbers like times).
 - One-on-one confirmation parsing now accepts short confirmations like `ok/okay/fine` to avoid repeated alone-policy re-asks.
 - Collection tone hardening is active: booking collection starts with a soft consent line before ordered questions.

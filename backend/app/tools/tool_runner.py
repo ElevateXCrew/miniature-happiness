@@ -203,6 +203,23 @@ class ToolRunner:
             "next_step": next_instruction,
         })
 
+    async def advisory_check_booking_field_update(
+        self, booking_id: str, field_name: str, field_value: Any
+    ) -> dict[str, Any]:
+        """
+        Advisory-only compatibility stub.
+
+        The actual guard evaluation is performed in ClientRuntimeService before
+        mutation tool execution, where inbound client text is available.
+        """
+        _ = (booking_id, field_name, field_value)
+        return _ok({
+            "allowed": True,
+            "reason": (
+                "Advisory check is evaluated by runtime guard with inbound context."
+            ),
+        })
+
     async def validate_booking_fields(self, booking_id: str) -> dict[str, Any]:
         from app.repositories.booking_repo import BookingRepository
 

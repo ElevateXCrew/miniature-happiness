@@ -360,6 +360,9 @@ class ClientRuntimeService:
                 return None
 
         if session.active_booking_id is None:
+            terminal_reply = await self._reply_for_latest_session_booking(session.id)
+            if terminal_reply is not None:
+                return terminal_reply
             return AgentReply(
                 text="I lost that booking draft. Send your date/time and I'll re-check.",
                 tool_traces=[],
@@ -367,6 +370,9 @@ class ClientRuntimeService:
 
         booking = await self.bookings.get_by_id(session.active_booking_id)
         if booking is None:
+            terminal_reply = await self._reply_for_latest_session_booking(session.id)
+            if terminal_reply is not None:
+                return terminal_reply
             return AgentReply(
                 text="I lost that booking draft. Send your date/time and I'll re-check.",
                 tool_traces=[],
@@ -396,6 +402,35 @@ class ClientRuntimeService:
                     "Perfect babe, I'm just finalizing everything. "
                     "I'll message you in a moment 😊"
                 ),
+                tool_traces=[],
+            )
+        return None
+
+    async def _reply_for_latest_session_booking(self, session_id: uuid.UUID) -> AgentReply | None:
+        latest = await self.bookings.get_latest_for_session(session_id)
+        if latest is None:
+            return None
+
+        if latest.status == BookingStatus.CONFIRMED:
+            return AgentReply(text="You're confirmed babe. See you soon xx", tool_traces=[])
+        if latest.status == BookingStatus.PENDING_REVIEW:
+            return AgentReply(
+                text="Perfect babe, it's with admin now. I'll update you soon.",
+                tool_traces=[],
+            )
+        if latest.status == BookingStatus.REJECTED:
+            return AgentReply(
+                text="Sorry babe, that slot isn't available now. Want to try a different time? 💕",
+                tool_traces=[],
+            )
+        if latest.status == BookingStatus.CANCELLED:
+            return AgentReply(
+                text="Booking cancelled babe. Message me whenever you want to rebook 😊",
+                tool_traces=[],
+            )
+        if latest.status == BookingStatus.COMPLETED:
+            return AgentReply(
+                text="That booking's all done babe. Want to arrange another? 😊",
                 tool_traces=[],
             )
         return None
@@ -458,6 +493,7 @@ class ClientRuntimeService:
         # the real active draft for this client/worker and substitute it in.
         _BOOKING_ID_TOOLS = {
             "get_required_next_field",
+            "advisory_check_booking_field_update",
             "update_booking_field",
             "validate_booking_fields",
             "submit_booking_for_review",
@@ -488,6 +524,30 @@ class ClientRuntimeService:
                         ),
                     }
                 patch_args["booking_id"] = str(resolved_id)
+
+        if name == "advisory_check_booking_field_update":
+            guard_error = await self._guard_update_field_from_inbound(
+                patch_args=patch_args,
+                inbound_text=inbound_text or "",
+            )
+            result: dict[str, Any] = {
+                "ok": True,
+                "allowed": guard_error is None,
+                "reason": (
+                    "Field update is allowed for the current inbound message."
+                    if guard_error is None
+                    else guard_error
+                ),
+            }
+            metrics.incr("tool_calls_ok_total")
+            await self.audit.log(
+                entity_type="client",
+                entity_id=client_id,
+                event_type="tool_execution_ok",
+                actor_type=ActorType.AGENT,
+                metadata={"tool": name, "arguments": patch_args, "result": result},
+            )
+            return result
 
         if name == "update_booking_field":
             guard_error = await self._guard_update_field_from_inbound(
@@ -977,6 +1037,9 @@ class ClientRuntimeService:
         if session.state == ConversationState.AWAITING_CLIENT_CONFIRMATION:
             if any(token in lowered for token in _YES_TERMS):
                 if not session.active_booking_id:
+                    terminal_reply = await self._reply_for_latest_session_booking(session.id)
+                    if terminal_reply is not None:
+                        return terminal_reply
                     return AgentReply(
                         text="I lost that booking draft. Send your date/time and I'll re-check.",
                         tool_traces=[],
@@ -1441,6 +1504,26 @@ class ClientRuntimeService:
                         "type": "object",
                         "properties": {"booking_id": {"type": "string"}},
                         "required": ["booking_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "advisory_check_booking_field_update",
+                    "description": (
+                        "Advisory-only guard check for booking field updates. "
+                        "Returns whether the proposed update is allowed by the same "
+                        "runtime guard used for update_booking_field; does not save data."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "booking_id": {"type": "string"},
+                            "field_name": {"type": "string"},
+                            "field_value": {},
+                        },
+                        "required": ["booking_id", "field_name", "field_value"],
                     },
                 },
             },
