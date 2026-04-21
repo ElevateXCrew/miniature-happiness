@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.booking import Booking
+from app.models.booking_media import BookingMedia
 from app.models.client import Client
 from app.models.conversation_session import ConversationSession
 from app.models.enums import (
@@ -158,6 +159,7 @@ async def test_check_availability_tool_call_patches_missing_worker_id(
         client_id=uuid.uuid4(),
         worker_id=uuid.uuid4(),
         channel=Channel.WHATSAPP,
+        inbound_text="I want to book for tomorrow",
     )
 
     assert result["ok"] is True
@@ -179,6 +181,7 @@ async def test_check_availability_tool_call_overrides_invalid_worker_id(
         client_id=uuid.uuid4(),
         worker_id=uuid.uuid4(),
         channel=Channel.WHATSAPP,
+        inbound_text="Can I book a slot?",
     )
 
     assert result["ok"] is True
@@ -221,6 +224,7 @@ async def test_check_availability_auto_creates_draft_booking_for_active_session(
         client_id=client.id,
         worker_id=worker.id,
         channel=Channel.WHATSAPP,
+        inbound_text="I want to book tomorrow at 8pm",
     )
 
     assert result["ok"] is True
@@ -233,11 +237,37 @@ async def test_check_availability_auto_creates_draft_booking_for_active_session(
     )
     booking = booking_result.scalar_one_or_none()
     assert booking is not None
-    assert booking.duration_minutes == 60
+    # Default availability check duration should not skip explicit duration collection.
+    assert booking.duration_minutes is None
+
+    refreshed_booking = await db.get(Booking, booking.id)
+    assert refreshed_booking is not None
+    assert runtime.booking_service.get_next_required_field(refreshed_booking) == "booking_type"
 
     refreshed_session = await db.get(ConversationSession, session.id)
     assert refreshed_session is not None
     assert refreshed_session.active_booking_id == booking.id
+
+
+@pytest.mark.asyncio
+async def test_check_availability_rejected_without_booking_intent_when_no_active_draft(
+    db: AsyncSession,
+) -> None:
+    runtime = AgentRuntimeService(db)
+    result = await runtime._execute_tool(
+        "check_availability",
+        {
+            "start_at": "2099-01-01T20:00",
+            "duration_minutes": 60,
+        },
+        client_id=uuid.uuid4(),
+        worker_id=uuid.uuid4(),
+        channel=Channel.WHATSAPP,
+        inbound_text="Hi",
+    )
+
+    assert result["ok"] is False
+    assert "booking intent" in str(result.get("error", "")).lower()
 
 
 @pytest.mark.asyncio
@@ -630,6 +660,57 @@ async def test_llm_yes_when_awaiting_confirmation_submits_without_recent_prompt_
     refreshed_booking = await db.get(Booking, booking.id)
     assert refreshed_booking is not None
     assert refreshed_booking.status == BookingStatus.PENDING_REVIEW
+
+
+@pytest.mark.asyncio
+async def test_admin_media_list_returns_entries_with_client_phone(
+    client: AsyncClient,
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.IDLE,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    media_one = BookingMedia(
+        client_id=person.id,
+        session_id=session.id,
+        booking_id=None,
+        channel=Channel.WHATSAPP,
+        media_type="image/jpeg",
+        source_url="https://example.com/one.jpg",
+        storage_url="447700000001/one.jpg",
+        is_receipt=False,
+    )
+    media_two = BookingMedia(
+        client_id=person.id,
+        session_id=session.id,
+        booking_id=None,
+        channel=Channel.WHATSAPP,
+        media_type="image/png",
+        source_url="https://example.com/two.png",
+        storage_url="447700000001/two.png",
+        is_receipt=True,
+    )
+    db.add_all([media_one, media_two])
+    await db.commit()
+
+    response = await client.get("/admin/media")
+    assert response.status_code == 200
+    rows = response.json()
+
+    matching = [r for r in rows if r["client_id"] == str(person.id)]
+    assert len(matching) == 2
+    assert all(r["client_phone_e164"] == person.phone_e164 for r in matching)
 
 
 @pytest.mark.asyncio

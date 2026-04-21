@@ -35,3 +35,6 @@ Thumbs.db
 # Future frontend artifacts
 node_modules/
 .next/
+
+
+media

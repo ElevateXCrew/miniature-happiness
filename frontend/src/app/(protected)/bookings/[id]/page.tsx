@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { MessageCircle, FileText, Bell, ImageIcon, Dot } from 'lucide-react';
 import { bookingsApi, mediaApi } from '@/lib/adminApi';
+import { BASE_URL, getAccessToken } from '@/lib/api';
 import { Badge, bookingStatusColor } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
@@ -42,9 +43,52 @@ export default function BookingDetailPage() {
   const [booking, setBooking] = useState<BookingDetail | null>(null);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [mediaPreviewUrls, setMediaPreviewUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'timeline' | 'media'>('timeline');
+
+  const resolveApiUrl = useCallback((url: string) => {
+    if (/^https?:\/\//i.test(url)) return url;
+    return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  }, []);
+
+  const buildMediaPreviewUrls = useCallback(async (items: MediaItem[]) => {
+    const token = getAccessToken();
+    const next: Record<string, string> = {};
+
+    await Promise.all(items.map(async (item) => {
+      if (!item.source_url) return;
+
+      // Auth-protected backend media endpoint must be fetched with bearer token,
+      // then rendered via object URL.
+      if (item.source_url.startsWith('/admin/media/')) {
+        if (!token) return;
+        try {
+          const res = await fetch(resolveApiUrl(item.source_url), {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) return;
+          const blob = await res.blob();
+          next[item.id] = URL.createObjectURL(blob);
+          return;
+        } catch {
+          return;
+        }
+      }
+
+      next[item.id] = resolveApiUrl(item.source_url);
+    }));
+
+    setMediaPreviewUrls((prev) => {
+      Object.entries(prev).forEach(([id, url]) => {
+        if (!(id in next) && url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+      return next;
+    });
+  }, [resolveApiUrl]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,12 +101,23 @@ export default function BookingDetailPage() {
       setBooking(b);
       setTimeline(t.timeline);
       setMedia(m);
+      await buildMediaPreviewUrls(m);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [buildMediaPreviewUrls, id]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(mediaPreviewUrls).forEach((url) => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, [mediaPreviewUrls]);
 
   const doAction = async (action: 'approve' | 'reject' | 'cancel') => {
     if (!booking) return;
@@ -252,7 +307,11 @@ export default function BookingDetailPage() {
                     <div className={styles.mediaThumb}>
                       {m.source_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={m.source_url} alt={m.media_type} className={styles.mediaImg} />
+                        <img
+                          src={mediaPreviewUrls[m.id] ?? resolveApiUrl(m.source_url)}
+                          alt={m.media_type ?? 'media'}
+                          className={styles.mediaImg}
+                        />
                       ) : (
                         <span className={styles.mediaPlaceholder}><ImageIcon size={32} /></span>
                       )}

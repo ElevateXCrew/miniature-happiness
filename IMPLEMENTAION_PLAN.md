@@ -15,6 +15,8 @@ This file is the single execution source of truth for project planning.
 - Worker mobile chat-first path is active: `/worker/messages` is the primary worker interaction endpoint with deterministic intent handling, Alysha-style free-form chat replies, and `executed_actions` response traces.
 - Worker realtime visibility now includes worker-targeted chat/operation events and worker-owned booking status updates.
 - Runtime path separation is active via facades: worker mobile chat/relay uses worker runtime policy, while client inbound/admin decision messaging uses client runtime policy over shared deterministic core services.
+- Availability intent gating is active: runtime blocks availability checks from starting collection when no active draft exists and inbound text does not clearly indicate booking intent.
+- Duration persistence guard is active: default availability check duration is not persisted into draft booking unless duration was explicitly stated by client inbound text.
 
 ## Scope Locks (Agreed)
 
@@ -39,6 +41,8 @@ This file is the single execution source of truth for project planning.
 - Conversation collection reliability:
   - Runtime pre-captures the next required booking field from inbound text before LLM generation to reduce repeated question loops.
   - Runtime blocks hallucinated/out-of-order booking field updates unless the value is supported by the current inbound text.
+  - Runtime enforces booking-intent gating before availability tool usage can initialize collection on a new thread.
+  - Runtime preserves mandatory duration questioning by not persisting default pre-check duration unless client text explicitly includes duration.
   - Age capture only accepts explicit age statements and rejects inferred numeric values from unrelated text.
   - One-on-one confirmations accept short replies like `ok/okay/fine` to avoid repeated prompts.
   - Incall address is sent at final confirmation stage (not immediately after booking type selection).
@@ -48,6 +52,7 @@ This file is the single execution source of truth for project planning.
   - Media can be received and linked to client/booking.
   - Twilio media is fetched and stored locally per client phone folder (`media/<client_phone>/...`) with metadata persisted in `booking_media.storage_url`.
   - Admin media listing serves local stored copies via backend endpoint when available.
+  - Admin media page groups all saved media by client phone and shows new inbound media under the same phone grouping.
   - If client is on SMS and media is needed, ask to send media on WhatsApp using same number.
 - Reminders: 20 minutes before booking to admin, worker, and client with type-specific wording.
 - Auth model: role-based with exactly two roles (`admin`, `worker`) using JWT access/refresh tokens.

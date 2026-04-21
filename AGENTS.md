@@ -12,9 +12,12 @@
 - Age capture hardening is active: client age is only accepted from explicit age statements (not inferred from unrelated numbers like times).
 - One-on-one confirmation parsing now accepts short confirmations like `ok/okay/fine` to avoid repeated alone-policy re-asks.
 - Collection tone hardening is active: booking collection starts with a soft consent line before ordered questions.
+- Interest gate hardening is active: runtime now rejects availability checks when no active draft exists and the client's inbound message does not clearly express booking intent.
+- Duration collection hardening is active: availability pre-check defaults no longer auto-fill booking duration unless the client explicitly provided duration in inbound text.
 - Incall address timing rule is enforced: address is shared in final confirmation summary, not immediately after incall selection.
 - Worker mobile client-relay now routes through agent runtime so client-facing text is Alysha-natural instead of raw relay text.
 - Twilio inbound media is now downloaded and stored under backend `media/<client_phone>/...`, and admin panel media list prefers served local copies.
+- Admin Media section is now active: it lists all saved media grouped by client phone number, and newly received media appears under the same client number on refresh.
 - Image-aware inbound guard is active: when media arrives, runtime receives attachment context in inbound text so Alysha can respond naturally.
 - Worker mobile chat-first execution is active: `POST /worker/messages` now supports query, command, client relay, and free-form agent chat intents with structured `executed_actions` in response.
 - Runtime facade split is now active: worker chat/relay paths use a worker runtime facade and worker prompt policy, while client inbound and admin decision messaging use a client runtime facade over shared core logic.
