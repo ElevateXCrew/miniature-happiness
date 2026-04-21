@@ -369,6 +369,7 @@ class ClientRuntimeService:
                     session_id=session_id,
                     llm_content=content,
                 )
+                await self._maybe_set_awaiting_confirmation_state(session_id=session_id)
                 return AgentReply(text=self._ensure_short_style(content), tool_traces=tool_traces)
 
         return AgentReply(
@@ -565,6 +566,31 @@ class ClientRuntimeService:
                 tool_traces=[],
             )
         return None
+
+    async def _maybe_set_awaiting_confirmation_state(self, *, session_id: uuid.UUID) -> None:
+        session = await self.sessions.get_by_id(session_id)
+        if session is None or session.active_booking_id is None:
+            return
+
+        if session.state in {
+            ConversationState.AWAITING_CLIENT_CONFIRMATION,
+            ConversationState.WAITING_REVIEW,
+        }:
+            return
+
+        booking = await self.bookings.get_by_id(session.active_booking_id)
+        if booking is None or booking.status != BookingStatus.DRAFT:
+            return
+
+        next_field = self.booking_service.get_next_required_field(booking)
+        if next_field is not None:
+            return
+
+        if booking.scheduled_start_at is None or booking.duration_minutes is None:
+            return
+
+        session.state = ConversationState.AWAITING_CLIENT_CONFIRMATION
+        await self.sessions.update(session)
 
     def _was_recent_confirmation_prompt(self, history: list[Any]) -> bool:
         for msg in reversed(history):
