@@ -55,6 +55,8 @@ This file is the single execution source of truth for project planning.
   - Twilio media is fetched and stored locally per client phone folder (`media/<client_phone>/...`) with metadata persisted in `booking_media.storage_url`.
   - Admin media listing serves local stored copies via backend endpoint when available.
   - Admin media page groups all saved media by client phone and shows new inbound media under the same phone grouping.
+  - WhatsApp inbound media triggers an explicit Alysha acknowledgment message (photo/screenshot received) in the same turn.
+  - Inbound media is marked receipt-true at ingest so booking context immediately reflects payment receipt received.
   - If client is on SMS and media is needed, ask to send media on WhatsApp using same number.
 - Reminders: 20 minutes before booking to admin, worker, and client with type-specific wording.
 - Auth model: role-based with exactly two roles (`admin`, `worker`) using JWT access/refresh tokens.

@@ -31,8 +31,9 @@
 3. Request advance payment for transport.
 4. If on SMS, ask client to send media via WhatsApp same number.
 5. Receive receipt image and attach to booking/session.
-5a. Fetch media from Twilio URL and store local copy under backend `media/<client_phone>/...`.
-6. Mark receipt and expose in admin panel.
+5a. Alysha sends an explicit short acknowledgment that the photo/screenshot was received.
+5b. Fetch media from Twilio URL and store local copy under backend `media/<client_phone>/...`.
+6. Mark receipt as received at ingest and expose in admin panel.
 7. Continue to review stage.
 
 ## 2a) Admin Media Gallery Grouping

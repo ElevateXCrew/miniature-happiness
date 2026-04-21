@@ -48,6 +48,7 @@ Notes:
   - One-on-one confirmation parser accepts short positive replies (`ok`, `okay`, `fine`) to prevent repeated re-asking.
   - Incall address is shared at final confirmation summary stage, not immediately after incall selection.
   - When inbound media is present, attachment context is injected into runtime inbound text so Alysha can respond naturally to image-only messages.
+  - On WhatsApp inbound media, runtime sends an explicit client-facing media acknowledgment in Alysha voice and marks the attachment as receipt-received in booking context.
 - `POST /agent/send-message`
   - Internal endpoint for deterministic outbound dispatch.
 
@@ -156,6 +157,7 @@ Example relay action entry:
 - `POST /media/twilio/ingest`
   - Returns enriched media metadata (`booking_id`, `channel`, `media_type`, `twilio_media_sid`, `is_receipt`, `source_url`).
   - Media file is fetched from Twilio and stored locally under backend `media/<client_phone>/...` when retrieval succeeds.
+  - Inbound media is persisted as receipt-received (`is_receipt=true`) for immediate booking/media context continuity.
 - `GET /admin/bookings/{booking_id}/media`
   - Prefers local served media URL when `storage_url` exists.
 - `GET /admin/media/{media_id}/content`

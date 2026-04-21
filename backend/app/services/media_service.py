@@ -55,11 +55,10 @@ class MediaService:
             media_type=normalized_media_type,
             twilio_media_sid=twilio_media_sid,
         )
-        inferred_receipt = self._looks_like_receipt(
-            source_url=normalized_source_url,
-            media_type=normalized_media_type,
-            twilio_media_sid=twilio_media_sid,
-        )
+        # Treat inbound client media as a receipt attachment by default so
+        # booking/media context can immediately reflect that a screenshot/photo
+        # was received in this session.
+        inferred_receipt = True
 
         media = BookingMedia(
             client_id=client_id,

@@ -146,6 +146,51 @@ async def test_twilio_sms_with_media_routes_to_whatsapp_prompt(
 
 
 @pytest.mark.asyncio
+async def test_twilio_whatsapp_with_media_sends_ack_and_marks_receipt(
+    client: AsyncClient,
+    db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.media_service import MediaService
+
+    monkeypatch.setattr(settings, "twilio_validate_signature", False)
+    monkeypatch.setattr(settings, "openai_api_key", "")
+
+    async def _fake_fetch(self: MediaService, **_: object) -> str | None:
+        return None
+
+    monkeypatch.setattr(MediaService, "_persist_media_file", _fake_fetch)
+
+    payload = {
+        "MessageSid": f"SM_PHASE2_WA_MEDIA_{uuid.uuid4().hex}",
+        "From": "whatsapp:+447700900334",
+        "Body": "",
+        "NumMedia": "1",
+        "MediaUrl0": "https://example.com/screenshot.jpg",
+        "MediaContentType0": "image/jpeg",
+        "MediaSid0": "ME_TEST_WA_001",
+    }
+    response = await client.post("/webhooks/twilio/whatsapp", data=payload)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/xml")
+
+    outbound_result = await db.execute(
+        select(Message)
+        .where(Message.direction == MessageDirection.OUTBOUND)
+        .order_by(Message.created_at.desc())
+    )
+    outbound = outbound_result.scalars().first()
+    assert outbound is not None
+    assert "received" in (outbound.body or "").lower()
+    assert "photo" in (outbound.body or "").lower() or "screenshot" in (outbound.body or "").lower()
+
+    media_result = await db.execute(select(BookingMedia).where(BookingMedia.twilio_media_sid == "ME_TEST_WA_001"))
+    media = media_result.scalar_one_or_none()
+    assert media is not None
+    assert media.is_receipt is True
+
+
+@pytest.mark.asyncio
 async def test_check_availability_tool_call_patches_missing_worker_id(
     db: AsyncSession,
 ) -> None:

@@ -76,11 +76,13 @@ The system should:
 - associate them with the correct booking when possible
 - keep them if the booking has not been created yet
 - acknowledge them naturally
+- always send an explicit short acknowledgment when media is received (e.g., photo/screenshot received)
 - make them visible to the admin
 - fetch media from Twilio and store local copies by client phone folder for reliable admin rendering
 - show all saved media in the admin Media section grouped by client phone number
 - keep new inbound media under the same client number grouping
 - pass attachment context into agent runtime so image-only messages still get natural Alysha responses
+- mark inbound media as receipt-received in context so Alysha can confirm receipt status consistently
 
 ---
 

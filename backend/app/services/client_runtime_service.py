@@ -99,6 +99,13 @@ class ClientRuntimeService:
         inbound_text: str,
         attached_media_count: int,
     ) -> AgentReply:
+        if channel == Channel.WHATSAPP and attached_media_count > 0:
+            return await self._generate_media_ack_reply(
+                session_id=session_id,
+                channel=channel,
+                inbound_text=inbound_text,
+            )
+
         if channel == Channel.SMS and attached_media_count > 0:
             return AgentReply(
                 text="Can you send that receipt on WhatsApp on this same number, babe?",
@@ -199,6 +206,63 @@ class ClientRuntimeService:
         if admin_reply is not None:
             return admin_reply
         return AgentReply(text="Got it babe, I'll update you shortly 😊", tool_traces=[])
+
+    async def _generate_media_ack_reply(
+        self,
+        *,
+        session_id: uuid.UUID,
+        channel: Channel,
+        inbound_text: str,
+    ) -> AgentReply:
+        if not settings.openai_api_key.strip():
+            return AgentReply(
+                text="I have received your photo/screenshot babe 😊",
+                tool_traces=[],
+            )
+
+        try:
+            session = await self.sessions.get_by_id(session_id)
+            booking_context = (
+                await self._build_booking_context_block(session) if session is not None else None
+            )
+            system_prompt = self._load_channel_prompt(channel, extra_context=booking_context)
+            history = await self.messages.list_for_session(session_id)
+
+            chat_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+            for msg in history[-10:]:
+                role = "user" if msg.direction == MessageDirection.INBOUND else "assistant"
+                chat_messages.append({"role": role, "content": msg.body or ""})
+
+            chat_messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "[SYSTEM — internal only] The client just sent media in this turn. "
+                        "Your reply MUST explicitly acknowledge receiving the "
+                        "photo/screenshot in Alysha's natural voice. "
+                        "If the client also asked something, answer briefly after "
+                        "the acknowledgement. Keep it to 1-2 lines."
+                    ),
+                }
+            )
+            chat_messages.append({"role": "user", "content": inbound_text})
+
+            client = self._get_openai_client()
+            completion = await cast(Any, client.chat.completions).create(
+                model=settings.openai_model,
+                temperature=0.2,
+                messages=chat_messages,
+            )
+            content = (completion.choices[0].message.content or "").strip()
+            if content:
+                return AgentReply(text=self._ensure_short_style(content), tool_traces=[])
+        except Exception as exc:
+            logger.warning("Media acknowledgement LLM generation failed", error=str(exc))
+
+        return AgentReply(
+            text="I have received your photo/screenshot babe 😊",
+            tool_traces=[],
+        )
 
     async def _generate_llm_reply(
         self,
@@ -593,7 +657,7 @@ class ClientRuntimeService:
             metadata={"tool": name, "arguments": patch_args, "result": result},
         )
         if isinstance(result, dict):
-            return cast(dict[str, Any], result)
+            return result
         return {"ok": False, "error": "Tool returned invalid response type."}
 
     async def _guard_update_field_from_inbound(
@@ -1374,6 +1438,8 @@ class ClientRuntimeService:
             lines.append("[Your booking records for this client]: No active booking draft.")
             return "\n".join(lines)
 
+        has_receipt = await self.booking_service.media.has_receipt_for_booking(booking.id)
+
         # Format the draft booking fields for the LLM.
         def fmt_dt(value: Any) -> str:
             if value is None:
@@ -1431,6 +1497,9 @@ class ClientRuntimeService:
             eth_line,
             size_line,
             alone_policy_line,
+            "  Payment receipt: RECEIVED"
+            if has_receipt
+            else "  Payment receipt: NOT RECEIVED",
         ]
 
         lines.append("[Your booking records for this client]:")
