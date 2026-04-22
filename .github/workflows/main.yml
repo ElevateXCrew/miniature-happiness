@@ -102,4 +102,4 @@ jobs:
             npm run build
 
             # Restart frontend service (replace name if different)
-            sudo systemctl restart frontend
+            sudo systemctl restart alysha-frontend
