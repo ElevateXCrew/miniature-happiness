@@ -638,8 +638,9 @@ async def test_update_booking_field_rejects_out_of_order_hallucinated_save(
 
 
 @pytest.mark.asyncio
-async def test_override_redundant_time_question_when_time_already_known(
+async def test_llm_reply_is_not_server_overridden_when_time_already_known(
     db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
     client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
@@ -674,18 +675,48 @@ async def test_override_redundant_time_question_when_time_already_known(
     await db.flush()
 
     runtime = AgentRuntimeService(db)
-    overridden = await runtime._override_redundant_prompt_for_booking(
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+
+    async def _fake_create(**_: object) -> object:
+        msg = type("Msg", (), {"content": "Ok babe. What time do you prefer?", "tool_calls": None})
+        choice = type("Choice", (), {"message": msg})
+        return type("Resp", (), {"choices": [choice]})
+
+    fake_client = type(
+        "FakeClient",
+        (),
+        {
+            "chat": type(
+                "Chat",
+                (),
+                {
+                    "completions": type(
+                        "Completions",
+                        (),
+                        {"create": staticmethod(_fake_create)},
+                    )()
+                },
+            )()
+        },
+    )()
+    monkeypatch.setattr(runtime, "_get_openai_client", lambda: fake_client)
+
+    reply = await runtime._generate_llm_reply(
         session_id=session.id,
-        llm_content="Ok babe. What time do you prefer?",
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="Anything",
     )
 
-    assert "what time" not in overridden.lower()
-    assert overridden == "Confirm your age for me please (18+)."
+    assert "what time" in reply.text.lower()
+    assert "confirm your age" not in reply.text.lower()
 
 
 @pytest.mark.asyncio
 async def test_llm_greeting_does_not_force_booking_prompt_when_idle(
     db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
     client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
@@ -702,6 +733,32 @@ async def test_llm_greeting_does_not_force_booking_prompt_when_idle(
     await db.flush()
 
     runtime = AgentRuntimeService(db)
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+
+    async def _fake_create(**_: object) -> object:
+        msg = type("Msg", (), {"content": "Hi babe 😘", "tool_calls": None})
+        choice = type("Choice", (), {"message": msg})
+        return type("Resp", (), {"choices": [choice]})
+
+    fake_client = type(
+        "FakeClient",
+        (),
+        {
+            "chat": type(
+                "Chat",
+                (),
+                {
+                    "completions": type(
+                        "Completions",
+                        (),
+                        {"create": staticmethod(_fake_create)},
+                    )()
+                },
+            )()
+        },
+    )()
+    monkeypatch.setattr(runtime, "_get_openai_client", lambda: fake_client)
+
     reply = await runtime._generate_llm_reply(
         session_id=session.id,
         client_id=client.id,
@@ -770,98 +827,9 @@ async def test_llm_yes_when_awaiting_confirmation_submits_without_recent_prompt_
 
 
 @pytest.mark.asyncio
-async def test_two_step_flow_asks_consent_before_bulk_collection(db: AsyncSession) -> None:
-    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
-    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
-    db.add_all([worker, client])
-    await db.flush()
-
-    session = ConversationSession(
-        client_id=client.id,
-        worker_id=worker.id,
-        state=ConversationState.COLLECTING,
-        last_channel=Channel.WHATSAPP,
-    )
-    db.add(session)
-    await db.flush()
-
-    booking = Booking(
-        client_id=client.id,
-        worker_id=worker.id,
-        session_id=session.id,
-        status=BookingStatus.DRAFT,
-        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
-    )
-    db.add(booking)
-    await db.flush()
-
-    session.active_booking_id = booking.id
-    db.add(session)
-    await db.flush()
-
-    runtime = AgentRuntimeService(db)
-    reply = await runtime._handle_two_step_collection_flow(
-        session_id=session.id,
-        inbound_text="I want to book",
-        history=[],
-    )
-
-    assert reply is not None
-    assert reply.text == "I need to collect some information for the booking, if you don't mind?"
-
-
-@pytest.mark.asyncio
-async def test_two_step_flow_sends_bulk_request_after_consent_yes(db: AsyncSession) -> None:
-    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
-    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
-    db.add_all([worker, client])
-    await db.flush()
-
-    session = ConversationSession(
-        client_id=client.id,
-        worker_id=worker.id,
-        state=ConversationState.COLLECTING,
-        last_channel=Channel.WHATSAPP,
-    )
-    db.add(session)
-    await db.flush()
-
-    booking = Booking(
-        client_id=client.id,
-        worker_id=worker.id,
-        session_id=session.id,
-        status=BookingStatus.DRAFT,
-        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
-    )
-    db.add(booking)
-    await db.flush()
-
-    session.active_booking_id = booking.id
-    db.add(session)
-    await db.flush()
-
-    consent_message = Message(
-        session_id=session.id,
-        direction=MessageDirection.OUTBOUND,
-        channel=Channel.WHATSAPP,
-        sender_type=SenderType.AGENT,
-        body="I need to collect some information for the booking, if you don't mind?",
-    )
-
-    runtime = AgentRuntimeService(db)
-    reply = await runtime._handle_two_step_collection_flow(
-        session_id=session.id,
-        inbound_text="yes",
-        history=[consent_message],
-    )
-
-    assert reply is not None
-    assert "send these in one message" in reply.text.lower()
-
-
-@pytest.mark.asyncio
-async def test_two_step_flow_asks_missing_field_one_by_one_after_bulk_prompt(
+async def test_collection_flow_does_not_force_consent_prompt(
     db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
     client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
@@ -891,7 +859,173 @@ async def test_two_step_flow_asks_missing_field_one_by_one_after_bulk_prompt(
     db.add(session)
     await db.flush()
 
-    bulk_message = Message(
+    runtime = AgentRuntimeService(db)
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+
+    async def _fake_create(**_: object) -> object:
+        msg = type(
+            "Msg",
+            (),
+            {
+                "content": "Of course babe, would you prefer incall or outcall?",
+                "tool_calls": None,
+            },
+        )
+        choice = type("Choice", (), {"message": msg})
+        return type("Resp", (), {"choices": [choice]})
+
+    fake_client = type(
+        "FakeClient",
+        (),
+        {
+            "chat": type(
+                "Chat",
+                (),
+                {
+                    "completions": type(
+                        "Completions",
+                        (),
+                        {"create": staticmethod(_fake_create)},
+                    )()
+                },
+            )()
+        },
+    )()
+    monkeypatch.setattr(runtime, "_get_openai_client", lambda: fake_client)
+
+    reply = await runtime._generate_llm_reply(
+        session_id=session.id,
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="I want to book",
+    )
+
+    assert "collect some information" not in reply.text.lower()
+    assert "incall or outcall" in reply.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_collection_flow_does_not_force_bulk_prompt_after_yes(
+    db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    _ = Message(
+        session_id=session.id,
+        direction=MessageDirection.OUTBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.AGENT,
+        body="I need to collect some information for the booking, if you don't mind?",
+    )
+
+    runtime = AgentRuntimeService(db)
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+
+    async def _fake_create(**_: object) -> object:
+        msg = type(
+            "Msg",
+            (),
+            {
+                "content": "Perfect babe, just tell me if you'd like incall or outcall.",
+                "tool_calls": None,
+            },
+        )
+        choice = type("Choice", (), {"message": msg})
+        return type("Resp", (), {"choices": [choice]})
+
+    fake_client = type(
+        "FakeClient",
+        (),
+        {
+            "chat": type(
+                "Chat",
+                (),
+                {
+                    "completions": type(
+                        "Completions",
+                        (),
+                        {"create": staticmethod(_fake_create)},
+                    )()
+                },
+            )()
+        },
+    )()
+    monkeypatch.setattr(runtime, "_get_openai_client", lambda: fake_client)
+
+    reply = await runtime._generate_llm_reply(
+        session_id=session.id,
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="yes",
+    )
+
+    assert "send these in one message" not in reply.text.lower()
+    assert "incall or outcall" in reply.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_collection_flow_handles_partial_details_without_bulk_intercept(
+    db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    _ = Message(
         session_id=session.id,
         direction=MessageDirection.OUTBOUND,
         channel=Channel.WHATSAPP,
@@ -903,13 +1037,48 @@ async def test_two_step_flow_asks_missing_field_one_by_one_after_bulk_prompt(
     )
 
     runtime = AgentRuntimeService(db)
-    reply = await runtime._handle_two_step_collection_flow(
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+
+    async def _fake_create(**_: object) -> object:
+        msg = type(
+            "Msg",
+            (),
+            {
+                "content": "Thanks babe, would you prefer incall or outcall?",
+                "tool_calls": None,
+            },
+        )
+        choice = type("Choice", (), {"message": msg})
+        return type("Resp", (), {"choices": [choice]})
+
+    fake_client = type(
+        "FakeClient",
+        (),
+        {
+            "chat": type(
+                "Chat",
+                (),
+                {
+                    "completions": type(
+                        "Completions",
+                        (),
+                        {"create": staticmethod(_fake_create)},
+                    )()
+                },
+            )()
+        },
+    )()
+    monkeypatch.setattr(runtime, "_get_openai_client", lambda: fake_client)
+
+    reply = await runtime._generate_llm_reply(
         session_id=session.id,
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
         inbound_text="I am 27 and Asian",
-        history=[bulk_message],
     )
 
-    assert reply is not None
+    assert "send these in one message" not in reply.text.lower()
     assert "incall or outcall" in reply.text.lower()
 
 
