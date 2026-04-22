@@ -193,6 +193,114 @@ async def test_twilio_whatsapp_with_media_sends_ack_and_marks_receipt(
 
 
 @pytest.mark.asyncio
+async def test_whatsapp_media_ack_does_not_request_whatsapp_again(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    out = await runtime._apply_media_ack_policy(
+        session_id=session.id,
+        channel=Channel.WHATSAPP,
+        text="I have received your photo babe. Please send it on WhatsApp.",
+    )
+
+    assert "send it on whatsapp" not in out.lower()
+    assert "received your photo" in out.lower() or "received your photo/screenshot" in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_media_ack_does_not_claim_review_without_pending_context(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    out = await runtime._apply_media_ack_policy(
+        session_id=session.id,
+        channel=Channel.WHATSAPP,
+        text="Yes babe, got it! Just reviewing - I'll confirm soon 😊",
+    )
+
+    assert "just reviewing" not in out.lower()
+    assert "i'll confirm soon" not in out.lower()
+    assert "share your date and time" in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_whatsapp_media_ack_keeps_review_reply_when_pending_context_exists(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.WAITING_REVIEW,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = Booking(
+        client_id=person.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.PENDING_REVIEW,
+        booking_type=BookingType.OUTCALL,
+        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
+        duration_minutes=60,
+        scheduled_end_at=datetime.now(UTC) + timedelta(days=1, hours=1),
+        client_age=26,
+        client_ethnicity="Asian",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    out = await runtime._apply_media_ack_policy(
+        session_id=session.id,
+        channel=Channel.WHATSAPP,
+        text="Yes babe, got it! Just reviewing - I'll confirm soon 😊",
+    )
+
+    assert "just reviewing" in out.lower()
+
+
+@pytest.mark.asyncio
 async def test_check_availability_tool_call_patches_missing_worker_id(
     db: AsyncSession,
 ) -> None:

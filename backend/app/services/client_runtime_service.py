@@ -123,7 +123,11 @@ class ClientRuntimeService:
                 )
                 if channel == Channel.WHATSAPP and attached_media_count > 0:
                     return AgentReply(
-                        text=self._ensure_media_ack_in_reply(reply.text),
+                        text=await self._apply_media_ack_policy(
+                            session_id=session_id,
+                            channel=channel,
+                            text=reply.text,
+                        ),
                         tool_traces=reply.tool_traces,
                     )
                 return reply
@@ -139,10 +143,53 @@ class ClientRuntimeService:
         )
         if channel == Channel.WHATSAPP and attached_media_count > 0:
             return AgentReply(
-                text=self._ensure_media_ack_in_reply(fallback_reply.text),
+                text=await self._apply_media_ack_policy(
+                    session_id=session_id,
+                    channel=channel,
+                    text=fallback_reply.text,
+                ),
                 tool_traces=fallback_reply.tool_traces,
             )
         return fallback_reply
+
+    async def _apply_media_ack_policy(
+        self,
+        *,
+        session_id: uuid.UUID,
+        channel: Channel,
+        text: str,
+    ) -> str:
+        acked = self._ensure_media_ack_in_reply(text)
+        lowered = acked.lower()
+
+        if channel == Channel.WHATSAPP and "whatsapp" in lowered and "send" in lowered:
+            return "I have received your photo/screenshot babe 😊"
+
+        review_markers = ("just reviewing", "i'll confirm soon", "ill confirm soon")
+        if any(marker in lowered for marker in review_markers):
+            has_review_context = await self._has_pending_review_context(session_id)
+            if not has_review_context:
+                return (
+                    "I have received your photo/screenshot babe 😊 "
+                    "Share your date and time and I'll sort the booking for you."
+                )
+
+        return acked
+
+    async def _has_pending_review_context(self, session_id: uuid.UUID) -> bool:
+        session = await self.sessions.get_by_id(session_id)
+        if session is None:
+            return False
+
+        review_statuses = {BookingStatus.PENDING_REVIEW, BookingStatus.CONFIRMED}
+
+        if session.active_booking_id is not None:
+            active = await self.bookings.get_by_id(session.active_booking_id)
+            if active is not None and active.status in review_statuses:
+                return True
+
+        latest = await self.bookings.get_latest_for_session(session_id)
+        return latest is not None and latest.status in review_statuses
 
     async def generate_admin_decision_reply(
         self,
