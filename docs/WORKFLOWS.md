@@ -15,6 +15,7 @@
 10a. Runtime may use advisory guard tool checks (`advisory_check_booking_field_update`) for planning, but advisory results never bypass mutation-time guard enforcement.
 11. Runtime blocks out-of-order/hallucinated field saves unless the value is present in current inbound text.
 11a. Age is captured only from explicit age statements; runtime does not infer age from unrelated numeric text.
+11b. Context-aware plain-age reply: when the next required field is `client_age` AND the last outbound message was an age question, a plain numeric reply (e.g. 25) is captured by the pre-capture path. Plain numbers in non-age contexts and out-of-order saves remain blocked.
 12. Run availability tool before confirming proposed slot.
 13. Persist/link a draft booking to the active session when availability succeeds (deterministic guard), but keep duration empty unless client explicitly provided it.
 14. Summarize details and request explicit confirmation.

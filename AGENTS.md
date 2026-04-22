@@ -12,6 +12,7 @@
 - Advisory guard tool is active: runtime now exposes `advisory_check_booking_field_update` for pre-checks while retaining hard server-side enforcement on `update_booking_field`.
 - Post-decision continuity guard is active: when admin confirms/rejects/cancels and active draft linkage is cleared, runtime now replies from latest session booking status instead of falling into a "lost booking draft" re-collection loop.
 - Age capture hardening is active: client age is only accepted from explicit age statements (not inferred from unrelated numbers like times).
+- Context-aware plain-age reply is active: when the next required field is `client_age` and Alysha's last outbound message was an age question, a plain numeric reply like "25" is accepted by the pre-capture path without requiring cue phrases like "I am" or "years old". Out-of-order saves and plain numbers in non-age contexts remain blocked.
 - One-on-one confirmation parsing now accepts short confirmations like `ok/okay/fine` to avoid repeated alone-policy re-asks.
 - Collection tone hardening is active: booking collection starts with a soft consent line before ordered questions.
 - Conversational collection hardening is active: runtime now lets GPT-led chat collect required booking details naturally using full session history and live booking context, without rigid server-side consent/bulk prompt intercepts.
@@ -28,7 +29,7 @@
 - Runtime facade split is now active: worker chat/relay paths use a worker runtime facade and worker prompt policy, while client inbound and admin decision messaging use a client runtime facade over shared core logic.
 - Worker realtime stream now carries worker-targeted chat and operation updates (`worker.chat_reply`, `worker.operation.completed`) plus worker-owned booking lifecycle updates.
 - Admin delete-history now clears full session artifacts: messages, linked media, linked notifications, and linked bookings (including draft/confirmed), then resets session state.
-- Current backend verification snapshot: 62 passing tests.
+- Current backend verification snapshot: 79 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.
 
 ## Read First (Order)

@@ -47,6 +47,7 @@ This file is the single execution source of truth for project planning.
   - Runtime enforces booking-intent gating before availability tool usage can initialize collection on a new thread.
   - Runtime preserves mandatory duration questioning by not persisting default pre-check duration unless client text explicitly includes duration.
   - Age capture only accepts explicit age statements and rejects inferred numeric values from unrelated text.
+  - Context-aware plain-age fallback is active: when the next required field is `client_age` and the last outbound message was an age question, a plain numeric reply (e.g. 25) is accepted in the pre-capture path. Plain numbers in non-age contexts and out-of-order saves remain blocked by the existing hallucination guard.
   - One-on-one confirmations accept short replies like `ok/okay/fine` to avoid repeated prompts.
   - Incall address is sent at final confirmation stage (not immediately after booking type selection).
   - Runtime now prioritizes GPT-led natural booking collection with full recent session history and live booking-record context, removing rigid consent/bulk-request server intercepts.

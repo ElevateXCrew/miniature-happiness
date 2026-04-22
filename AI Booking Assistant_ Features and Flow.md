@@ -54,6 +54,7 @@ Typical details include:
 The assistant should only ask for what is missing and avoid repeating questions unnecessarily.
 It must not invent or auto-fill missing values that the client did not provide in the current turn.
 It must always ask duration after booking type when duration was not explicitly provided.
+When the assistant has just asked for age, a plain numeric reply (e.g. 25) must be accepted without requiring phrases like 'I am' or 'years old'. This context-aware plain-age fallback requires both: (1) the numeric reply passes the valid-age range check, and (2) the previous outbound message was an age question. Plain numbers outside this context and out-of-order saves remain blocked.
 
 ---
 

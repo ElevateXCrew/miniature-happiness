@@ -1290,3 +1290,316 @@ async def test_pending_review_status_guard_avoids_reasking_fields(
 
     assert "with admin now" in reply.text.lower()
     assert "confirm your age" not in reply.text.lower()
+
+# ---------------------------------------------------------------------------
+# Context-aware age guard regression tests (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_plain_age_reply_after_age_prompt_is_captured(
+    db: AsyncSession,
+) -> None:
+    """
+    After Alysha asks for age, a plain numeric reply like "25" must be saved
+    without triggering a re-ask loop.
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=person.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    # Simulate Alysha's last outbound message being an age question.
+    age_prompt = Message(
+        session_id=session.id,
+        direction=MessageDirection.OUTBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.AGENT,
+        body="Confirm your age for me please (18+).",
+    )
+    db.add(age_prompt)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    # Client replies with plain "25" - should be accepted.
+    await runtime._pre_capture_required_field_from_inbound(
+        session_id=session.id,
+        inbound_text="25",
+    )
+
+    refreshed = await db.get(Booking, booking.id)
+    assert refreshed is not None
+    assert refreshed.client_age == 25, (
+        "Plain '25' after age prompt must be captured as client_age"
+    )
+    # Next field must be client_ethnicity -- not client_age again (no re-ask loop).
+    assert runtime.booking_service.get_next_required_field(refreshed) == "client_ethnicity"
+
+
+@pytest.mark.asyncio
+async def test_plain_age_without_age_prompt_context_is_blocked(
+    db: AsyncSession,
+) -> None:
+    """
+    A plain "25" reply must NOT be captured as age when Alysha's last message
+    was not an age question.
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=person.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    # Last outbound message is NOT an age question.
+    non_age_prompt = Message(
+        session_id=session.id,
+        direction=MessageDirection.OUTBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.AGENT,
+        body="Would you prefer incall or outcall babe?",
+    )
+    db.add(non_age_prompt)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    await runtime._pre_capture_required_field_from_inbound(
+        session_id=session.id,
+        inbound_text="25",
+    )
+
+    refreshed = await db.get(Booking, booking.id)
+    assert refreshed is not None
+    assert refreshed.client_age is None, (
+        "Plain '25' without age context must NOT be saved as client_age"
+    )
+
+
+@pytest.mark.asyncio
+async def test_out_of_order_age_save_remains_blocked(
+    db: AsyncSession,
+) -> None:
+    """
+    Directly calling update_booking_field for client_age when the next required
+    field is NOT client_age must still be blocked by the hallucination guard.
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    # booking_type is not yet set -> next required field is booking_type, not age
+    booking = Booking(
+        client_id=person.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    result = await runtime._execute_tool(
+        "update_booking_field",
+        {
+            "booking_id": str(booking.id),
+            "field_name": "client_age",
+            "field_value": 25,
+        },
+        client_id=person.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="I am 25 years old",
+    )
+
+    assert result["ok"] is False
+    assert "collect" in str(result.get("error", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_review_submission_reaches_admin_queue_non_regression(
+    db: AsyncSession,
+) -> None:
+    """
+    Non-regression: after all fields are collected and client confirms, the
+    booking must transition to PENDING_REVIEW (admin queue).
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.AWAITING_CLIENT_CONFIRMATION,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=person.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+        client_age=25,
+        client_ethnicity="Asian",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    confirm_prompt = Message(
+        session_id=session.id,
+        direction=MessageDirection.OUTBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.AGENT,
+        body="Just to confirm - incall tomorrow for 60 mins. Reply yes to confirm.",
+    )
+    db.add(confirm_prompt)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._generate_llm_reply(
+        session_id=session.id,
+        client_id=person.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="yes",
+    )
+
+    assert "finalizing" in reply.text.lower()
+    refreshed = await db.get(Booking, booking.id)
+    assert refreshed is not None
+    assert refreshed.status == BookingStatus.PENDING_REVIEW
+
+
+@pytest.mark.asyncio
+async def test_admin_approve_transitions_booking_to_confirmed_non_regression(
+    client: AsyncClient,
+    db: AsyncSession,
+) -> None:
+    """
+    Non-regression: admin approve endpoint must transition a PENDING_REVIEW
+    booking to CONFIRMED and return the updated status.
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.WAITING_REVIEW,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=person.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.PENDING_REVIEW,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+        client_age=25,
+        client_ethnicity="Asian",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.commit()
+
+    response = await client.post(f"/admin/bookings/{booking.id}/approve", json={})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "confirmed"

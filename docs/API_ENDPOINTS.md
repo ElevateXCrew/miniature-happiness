@@ -46,6 +46,7 @@ Notes:
   - Exposes advisory pre-check tool `advisory_check_booking_field_update` for model planning, while keeping hard enforcement on `update_booking_field` before any persistence.
   - Applies post-decision continuity guard: if active draft linkage is cleared by admin decision transitions, runtime responds from latest session booking status rather than re-entering draft collection with a "lost draft" prompt.
   - Age extraction accepts only explicit age statements (for example "I am 24" / "24 years old") to avoid inferred values from unrelated numbers.
+  - Context-aware plain-age fallback: when the next required field is `client_age` and the previous outbound message was an age question, the pre-capture path accepts a standalone numeric reply (e.g. 25) without requiring explicit age cue phrases. Out-of-order saves and plain numbers outside age-question context remain blocked.
   - One-on-one confirmation parser accepts short positive replies (`ok`, `okay`, `fine`) to prevent repeated re-asking.
   - Incall address is shared at final confirmation summary stage, not immediately after incall selection.
   - When inbound media is present, attachment context is injected into runtime inbound text so Alysha can respond naturally to image-only messages.

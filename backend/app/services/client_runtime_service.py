@@ -793,10 +793,29 @@ class ClientRuntimeService:
                 requested_age = int(field_value)
             except (TypeError, ValueError):
                 return "Invalid age value."
+            if extracted_age is None:
+                # Context-aware fallback: allow plain numeric replies like "25"
+                # only when age is the next required field and Alysha just asked age.
+                plain_age = self._extract_plain_age_reply(inbound_text)
+                if (
+                    plain_age is not None
+                    and plain_age == requested_age
+                    and expected_next == "client_age"
+                    and await self._was_recent_age_prompt(booking.session_id)
+                ):
+                    extracted_age = plain_age
+
             if extracted_age is None or extracted_age != requested_age:
                 return "Age must match the client's current message."
             if not any(cue in text for cue in age_cues):
-                return "Do not infer age without an explicit age statement."
+                plain_age = self._extract_plain_age_reply(inbound_text)
+                if not (
+                    plain_age is not None
+                    and plain_age == requested_age
+                    and expected_next == "client_age"
+                    and await self._was_recent_age_prompt(booking.session_id)
+                ):
+                    return "Do not infer age without an explicit age statement."
 
         if field_name == "client_ethnicity":
             if value_text and value_text not in text:
@@ -1247,9 +1266,23 @@ class ClientRuntimeService:
         if field_name == "client_age":
             age = self._extract_age(text)
             if age is None:
+                # Context-aware fallback: accept a plain numeric reply like "25"
+                # only when Alysha just asked about age in the previous outbound turn.
+                # Strict guards (same conditions as the LLM tool-guard path):
+                #   1) text matches _extract_plain_age_reply (numeric-only, no colons)
+                #   2) the last outbound message is an age question
+                plain_age = self._extract_plain_age_reply(text)
+                if plain_age is not None:
+                    booking_obj = await self.bookings.get_by_id(booking_id)
+                    if booking_obj is not None and await self._was_recent_age_prompt(
+                        booking_obj.session_id
+                    ):
+                        age = plain_age
+            if age is None:
                 return "Before we continue, confirm your age please (18+)."
             _, errors = await self.booking_service.update_field(booking_id, field_name, age)
             return errors[0] if errors else None
+
 
         if field_name == "client_ethnicity":
             value = self._extract_ethnicity(text)
@@ -1423,6 +1456,31 @@ class ClientRuntimeService:
             if 18 <= age <= 99:
                 return age
         return None
+
+    def _extract_plain_age_reply(self, text: str) -> int | None:
+        # Accept short standalone numeric replies like "25" or "25.".
+        # Avoid time-like tokens (e.g. "20:00") and mixed-content lines.
+        if ":" in text:
+            return None
+        match = re.fullmatch(r"\s*(\d{2})\s*[.!?]?\s*", text)
+        if not match:
+            return None
+        age = int(match.group(1))
+        if 18 <= age <= 99:
+            return age
+        return None
+
+    async def _was_recent_age_prompt(self, session_id: uuid.UUID) -> bool:
+        history = await self.messages.list_for_session(session_id)
+        for msg in reversed(history):
+            if msg.direction != MessageDirection.OUTBOUND:
+                continue
+            body = (msg.body or "").lower().strip()
+            if not body:
+                return False
+            age_tokens = ("how old", "your age", "confirm your age", "age")
+            return any(token in body for token in age_tokens)
+        return False
 
     def _extract_duration_minutes(self, text: str) -> int | None:
         lower = text.lower()
