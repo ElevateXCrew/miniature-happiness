@@ -60,12 +60,14 @@ app/services/agent_runtime.py
 app/services/auth_service.py
 app/services/availability_service.py
 app/services/booking_service.py
+app/services/client_runtime_service.py
 app/services/conversation_orchestrator.py
 app/services/event_stream.py
 app/services/media_service.py
 app/services/notification_service.py
 app/services/permission_service.py
 app/services/twilio_gateway.py
+app/services/worker_runtime_service.py
 app/services/worker_service.py
 app/tools/__init__.py
 app/tools/tool_runner.py
