@@ -179,6 +179,38 @@ async def test_tool_failure_telemetry_increments_counter_and_writes_audit(
 
 
 @pytest.mark.asyncio
+async def test_unknown_tool_failure_writes_audit(
+    db: AsyncSession,
+) -> None:
+    service = AgentRuntimeService(db)
+    client_id = uuid.uuid4()
+    worker_id = uuid.uuid4()
+
+    result = await service._execute_tool(
+        "totally_unknown_tool",
+        {"foo": "bar"},
+        client_id,
+        worker_id,
+        Channel.SMS,
+    )
+    assert result["ok"] is False
+    assert "Unknown tool" in str(result.get("error"))
+
+    audit_result = await db.execute(
+        select(AuditEvent).where(
+            AuditEvent.entity_type == "client",
+            AuditEvent.entity_id == client_id,
+            AuditEvent.event_type == "tool_execution_failed",
+        )
+    )
+    audit = audit_result.scalars().first()
+    assert audit is not None
+    assert audit.metadata_["tool"] == "totally_unknown_tool"
+    assert audit.metadata_["arguments"]["foo"] == "bar"
+    assert "Unknown tool" in str(audit.metadata_["error"])
+
+
+@pytest.mark.asyncio
 async def test_availability_tool_invalid_datetime_returns_deterministic_error(
     db: AsyncSession,
 ) -> None:

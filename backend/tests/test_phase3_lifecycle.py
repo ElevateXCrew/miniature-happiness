@@ -564,6 +564,50 @@ async def test_outcall_cannot_submit_without_address_and_advance(db: AsyncSessio
 
 
 @pytest.mark.asyncio
+async def test_outcall_submit_sets_default_advance_when_missing(db: AsyncSession) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.OUTCALL,
+        scheduled_start_at=start,
+        duration_minutes=60,
+        scheduled_end_at=start + timedelta(minutes=60),
+        outcall_address="Hotel room 17",
+        client_age=24,
+        client_ethnicity="British",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
+    )
+    db.add(booking)
+    await db.flush()
+
+    svc = BookingService(db)
+    updated, errors = await svc.submit_for_review(booking.id)
+    assert not errors
+    assert updated is not None
+    assert updated.status == BookingStatus.PENDING_REVIEW
+    assert updated.advance_required_gbp is not None
+    assert float(updated.advance_required_gbp) == 50.0
+
+
+@pytest.mark.asyncio
 async def test_outcall_confirmation_requires_advance_and_receipt(
     client: AsyncClient,
     db: AsyncSession,

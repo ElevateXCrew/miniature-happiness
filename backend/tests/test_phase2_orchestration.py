@@ -301,6 +301,56 @@ async def test_whatsapp_media_ack_keeps_review_reply_when_pending_context_exists
 
 
 @pytest.mark.asyncio
+async def test_whatsapp_media_ack_strips_review_wording_for_active_draft(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = Booking(
+        client_id=person.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.OUTCALL,
+        scheduled_start_at=datetime.now(UTC) + timedelta(days=1),
+        duration_minutes=60,
+        scheduled_end_at=datetime.now(UTC) + timedelta(days=1, hours=1),
+        client_age=26,
+        client_ethnicity="Asian",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    out = await runtime._apply_media_ack_policy(
+        session_id=session.id,
+        channel=Channel.WHATSAPP,
+        text="Yes babe, got it! Just reviewing - I'll confirm soon 😊",
+    )
+
+    assert "just reviewing" not in out.lower()
+    assert "i'll confirm soon" not in out.lower()
+
+
+@pytest.mark.asyncio
 async def test_check_availability_tool_call_patches_missing_worker_id(
     db: AsyncSession,
 ) -> None:
@@ -341,6 +391,95 @@ async def test_check_availability_tool_call_overrides_invalid_worker_id(
 
     assert result["ok"] is True
     assert "available" in result
+
+
+@pytest.mark.asyncio
+async def test_update_booking_field_normalizes_aliases_and_values(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+
+    booking_type_result = await runtime._execute_tool(
+        "update_booking_field",
+        {
+            "booking_id": str(booking.id),
+            "field_name": "booking_type",
+            "field_value": "Incall",
+        },
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="I want incall",
+    )
+    assert booking_type_result["ok"] is True
+
+    size_result = await runtime._execute_tool(
+        "update_booking_field",
+        {
+            "booking_id": str(booking.id),
+            "field_name": "client_size",
+            "field_value": "4 inches",
+        },
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="size is 4",
+    )
+    # Guard should block out-of-order size save, but alias/value normalization should
+    # avoid low-signal "Unknown field" tool failures.
+    assert size_result["ok"] is False
+    assert "unknown field" not in str(size_result.get("error", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_route_media_request_defaults_placeholder_client_id(
+    db: AsyncSession,
+) -> None:
+    runtime = AgentRuntimeService(db)
+    client_id = uuid.uuid4()
+    result = await runtime._execute_tool(
+        "route_media_request_to_whatsapp",
+        {"client_id": "client"},
+        client_id=client_id,
+        worker_id=uuid.uuid4(),
+        channel=Channel.SMS,
+        inbound_text="can i send screenshot",
+    )
+
+    assert result["ok"] is True
+    assert result.get("channel") == "sms"
+    assert result.get("queued") is True
 
 
 @pytest.mark.asyncio
@@ -488,6 +627,75 @@ async def test_llm_yes_reply_submits_active_draft_for_review(
     refreshed_booking = await db.get(Booking, booking.id)
     assert refreshed_booking is not None
     assert refreshed_booking.status == BookingStatus.PENDING_REVIEW
+
+
+@pytest.mark.asyncio
+async def test_llm_yes_reply_submits_outcall_and_sets_default_advance(
+    db: AsyncSession,
+) -> None:
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    client = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, client])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=client.id,
+        worker_id=worker.id,
+        state=ConversationState.AWAITING_CLIENT_CONFIRMATION,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=client.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.DRAFT,
+        booking_type=BookingType.OUTCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+        outcall_address="Hotel 21, London",
+        client_age=25,
+        client_ethnicity="Asian",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    outbound_prompt = Message(
+        session_id=session.id,
+        direction=MessageDirection.OUTBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.AGENT,
+        body="Just to confirm: outcall tomorrow 8pm for 1 hour. Reply yes to confirm.",
+    )
+    db.add(outbound_prompt)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._generate_llm_reply(
+        session_id=session.id,
+        client_id=client.id,
+        worker_id=worker.id,
+        channel=Channel.WHATSAPP,
+        inbound_text="yes",
+    )
+
+    assert "finalizing" in reply.text.lower()
+
+    refreshed_booking = await db.get(Booking, booking.id)
+    assert refreshed_booking is not None
+    assert refreshed_booking.status == BookingStatus.PENDING_REVIEW
+    assert refreshed_booking.advance_required_gbp is not None
+    assert float(refreshed_booking.advance_required_gbp) == 50.0
 
 
 @pytest.mark.asyncio

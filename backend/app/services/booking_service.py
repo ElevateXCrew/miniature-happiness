@@ -311,6 +311,8 @@ class BookingService:
         if booking_type_errors:
             return booking, booking_type_errors
 
+        await self._ensure_outcall_advance_defaults(booking)
+
         outcall_errors = await self._validate_outcall_requirements(booking)
         if outcall_errors:
             return booking, outcall_errors
@@ -690,3 +692,15 @@ class BookingService:
         if booking.booking_type is None:
             return ["Booking type must be set to incall or outcall before review."]
         return []
+
+    async def _ensure_outcall_advance_defaults(self, booking: Any) -> None:
+        from app.models.enums import BookingType
+
+        if booking.booking_type != BookingType.OUTCALL:
+            return
+
+        if booking.advance_required_gbp is not None:
+            return
+
+        booking.advance_required_gbp = Decimal("50")
+        await self.repo.save(booking)

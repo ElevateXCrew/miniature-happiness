@@ -25,10 +25,14 @@
 - Admin Media section is now active: it lists all saved media grouped by client phone number, and newly received media appears under the same client number on refresh.
 - Image-aware inbound guard is active: when media arrives, runtime receives attachment context in inbound text so Alysha can respond naturally.
 - WhatsApp media acknowledgment is now explicit: when client sends media, Alysha responds with a short receipt/photo acknowledgment in-context, and inbound media is marked receipt-true for booking/media context continuity.
+- WhatsApp media review-claim guard is hardened: "just reviewing / I'll confirm soon" wording is now only allowed when booking context is actually pending/confirmed; draft-only context gets a neutral receipt acknowledgment.
 - Worker mobile chat-first execution is active: `POST /worker/messages` now supports query, command, client relay, and free-form agent chat intents with structured `executed_actions` in response.
 - Runtime facade split is now active: worker chat/relay paths use a worker runtime facade and worker prompt policy, while client inbound and admin decision messaging use a client runtime facade over shared core logic.
 - Worker realtime stream now carries worker-targeted chat and operation updates (`worker.chat_reply`, `worker.operation.completed`) plus worker-owned booking lifecycle updates.
 - Admin delete-history now clears full session artifacts: messages, linked media, linked notifications, and linked bookings (including draft/confirmed), then resets session state.
+- Tool call normalization hardening is active: runtime now normalizes common alias/mis-cased tool arguments before execution (for example `duration -> duration_minutes`, `client_size -> client_size_inches`, `Incall -> incall`) and falls back placeholder client ids for media-routing tool calls.
+- Tool failure telemetry hardening is active: all runtime tool-failure branches now emit `tool_execution_failed` audit events and increment failed-tool counters consistently.
+- Outcall review defaulting is active: when an outcall draft is otherwise complete at submit-for-review time and advance amount is missing, backend now defaults `advance_required_gbp` to 50 so booking can move to admin queue.
 - Current backend verification snapshot: 79 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.
 

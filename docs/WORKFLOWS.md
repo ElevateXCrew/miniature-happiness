@@ -21,6 +21,7 @@
 14. Summarize details and request explicit confirmation.
 15. For incall, include address only in final confirmation summary (not immediately after booking type).
 16. On explicit yes (including short confirmations like ok/okay/fine where applicable), move to `PENDING_REVIEW` and notify admin + worker.
+16a. For outcall drafts that are otherwise complete at submit-for-review time, backend defaults missing `advance_required_gbp` to 50 GBP so review submission is not blocked by absent advance amount.
 17. Tell client to wait briefly.
 18. On approval/rejection/cancel event, route an internal decision instruction through agent runtime.
 19. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
@@ -36,6 +37,7 @@
 4. If on SMS, ask client to send media via WhatsApp same number.
 5. Receive receipt image and attach to booking/session.
 5a. Alysha sends an explicit short acknowledgment that the photo/screenshot was received.
+5a.i. "Just reviewing / I'll confirm soon" phrasing is only allowed when booking context is truly pending review or confirmed; draft-only context uses neutral receipt acknowledgment.
 5b. Fetch media from Twilio URL and store local copy under backend `media/<client_phone>/...`.
 6. Mark receipt as received at ingest and expose in admin panel.
 7. Continue to review stage.

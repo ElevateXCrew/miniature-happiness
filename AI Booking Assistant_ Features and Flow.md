@@ -85,6 +85,7 @@ The system should:
 - keep new inbound media under the same client number grouping
 - pass attachment context into agent runtime so image-only messages still get natural Alysha responses
 - mark inbound media as receipt-received in context so Alysha can confirm receipt status consistently
+- allow "just reviewing / I'll confirm soon" style wording only when booking is actually in pending/confirmed review context; draft-only context should use neutral receipt acknowledgment
 
 ---
 
@@ -166,6 +167,7 @@ When everything needed is present:
 ### Step 5: Booking Saved
 After availability succeeds, the system ensures a draft booking is persisted and linked to the active session.
 After the client confirms:
+- for outcall, if advance amount is not set but all required booking fields are complete, backend defaults the required advance to 50 GBP at submit-for-review time
 - the booking transitions from draft to review state
 - it becomes visible for admin review
 - the client remains in the conversation with context preserved

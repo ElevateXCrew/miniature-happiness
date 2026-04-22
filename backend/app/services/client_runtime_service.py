@@ -44,6 +44,15 @@ _BOOKING_INTENT_TERMS = {
     "slot",
 }
 _YES_TERMS = {"yes", "y", "yeah", "yep", "confirm", "go ahead", "ok", "okay"}
+_FIELD_NAME_ALIASES = {
+    "age": "client_age",
+    "ethnicity": "client_ethnicity",
+    "size": "client_size_inches",
+    "client_size": "client_size_inches",
+    "duration": "duration_minutes",
+    "client_alone_policy": "alone_policy_confirmed",
+    "alone_policy": "alone_policy_confirmed",
+}
 
 
 @dataclass
@@ -184,26 +193,14 @@ class ClientRuntimeService:
 
         # If the LLM hallucinates a review-in-progress message but the booking
         # is not actually pending/confirmed, replace with a safe ack + guidance.
-        # IMPORTANT: do NOT replace if there is an active DRAFT booking — the
-        # receipt was just received as part of the ongoing collection flow and
-        # the LLM's "I'll confirm soon" is natural continuity, not a hallucination.
         review_markers = ("just reviewing", "i'll confirm soon", "ill confirm soon")
         if any(marker in lowered for marker in review_markers):
             has_review_context = await self._has_pending_review_context(session_id)
             if not has_review_context:
-                # Only replace if there is also no active draft booking — if
-                # there IS a draft, the receipt was received mid-collection and
-                # the LLM reply is valid; keep it.
-                session = await self.sessions.get_by_id(session_id)
-                has_active_draft = False
-                if session and session.active_booking_id:
-                    booking = await self.bookings.get_by_id(session.active_booking_id)
-                    has_active_draft = booking is not None and booking.status == BookingStatus.DRAFT
-                if not has_active_draft:
-                    return (
-                        "I have received your photo/screenshot babe 😊 "
-                        "Send me your preferred date and time and I'll get that sorted."
-                    )
+                return (
+                    "I have received your photo/screenshot babe 😊 "
+                    "Send me your preferred date and time and I'll get that sorted."
+                )
 
         return acked
 
@@ -598,18 +595,41 @@ class ClientRuntimeService:
         channel: Channel,
         inbound_text: str | None = None,
     ) -> dict[str, Any]:
+        patch_args = dict(args)
+
+        async def _fail(error: str, *, audit_args: dict[str, Any] | None = None) -> dict[str, Any]:
+            metrics.incr("tool_calls_failed_total")
+            args_for_audit = audit_args if audit_args is not None else patch_args
+            await self.audit.log(
+                entity_type="client",
+                entity_id=client_id,
+                event_type="tool_execution_failed",
+                actor_type=ActorType.AGENT,
+                metadata={"tool": name, "arguments": args_for_audit, "error": error},
+            )
+            return {"ok": False, "error": error}
+
         method = getattr(self.tool_runner, name, None)
         if method is None:
-            metrics.incr("tool_calls_failed_total")
-            return {"ok": False, "error": f"Unknown tool: {name}"}
+            return await _fail(f"Unknown tool: {name}", audit_args=patch_args)
 
-        patch_args = dict(args)
+        patch_args = self._normalize_tool_arguments(name, patch_args)
         if name == "get_or_create_client_by_phone" and "phone_e164" not in patch_args:
-            return {"ok": False, "error": "phone_e164 is required"}
+            return await _fail("phone_e164 is required")
         if name == "get_or_create_active_session":
             patch_args.setdefault("client_id", str(client_id))
             patch_args.setdefault("worker_id", str(worker_id))
             patch_args.setdefault("channel", channel.value)
+        if name == "route_media_request_to_whatsapp":
+            raw_client_id = str(patch_args.get("client_id", "")).strip()
+            if not raw_client_id:
+                patch_args["client_id"] = str(client_id)
+            else:
+                try:
+                    uuid.UUID(raw_client_id)
+                except ValueError:
+                    if raw_client_id.lower() in {"client", "current_client", "this_client"}:
+                        patch_args["client_id"] = str(client_id)
         if name == "check_availability":
             # Always enforce server-trusted worker identity and ignore model-provided values.
             patch_args["worker_id"] = str(worker_id)
@@ -618,13 +638,10 @@ class ClientRuntimeService:
                 session is not None and session.active_booking_id is not None
             )
             if not has_active_draft and not self._has_booking_intent(inbound_text or ""):
-                return {
-                    "ok": False,
-                    "error": (
-                        "Check availability only after the client clearly shows booking intent. "
-                        "Keep it conversational first."
-                    ),
-                }
+                return await _fail(
+                    "Check availability only after the client clearly shows booking intent. "
+                    "Keep it conversational first."
+                )
 
         # Guard: if the LLM passed a non-UUID booking_id (e.g. "DRAFT"), resolve
         # the real active draft for this client/worker and substitute it in.
@@ -652,14 +669,10 @@ class ClientRuntimeService:
                         if draft is not None:
                             resolved_id = draft.id
                 if resolved_id is None:
-                    metrics.incr("tool_calls_failed_total")
-                    return {
-                        "ok": False,
-                        "error": (
-                            f"booking_id '{raw_bid}' is not valid and no active draft found. "
-                            "Call check_availability first to create a draft."
-                        ),
-                    }
+                    return await _fail(
+                        f"booking_id '{raw_bid}' is not valid and no active draft found. "
+                        "Call check_availability first to create a draft."
+                    )
                 patch_args["booking_id"] = str(resolved_id)
 
         if name == "advisory_check_booking_field_update":
@@ -692,21 +705,12 @@ class ClientRuntimeService:
                 inbound_text=inbound_text or "",
             )
             if guard_error is not None:
-                metrics.incr("tool_calls_failed_total")
-                return {"ok": False, "error": guard_error}
+                return await _fail(guard_error)
 
         try:
             result = await method(**patch_args)
         except Exception as exc:
-            metrics.incr("tool_calls_failed_total")
-            await self.audit.log(
-                entity_type="client",
-                entity_id=client_id,
-                event_type="tool_execution_failed",
-                actor_type=ActorType.AGENT,
-                metadata={"tool": name, "arguments": patch_args, "error": str(exc)},
-            )
-            return {"ok": False, "error": str(exc)}
+            return await _fail(str(exc))
 
         if name == "check_availability" and result.get("ok", False):
             await self._ensure_draft_booking_after_availability(
@@ -716,6 +720,9 @@ class ClientRuntimeService:
                 inbound_text=inbound_text or "",
             )
 
+        if not isinstance(result, dict):
+            return await _fail("Tool returned invalid response type.")
+
         if result.get("ok"):
             metrics.incr("tool_calls_ok_total")
             event = "tool_execution_ok"
@@ -724,14 +731,61 @@ class ClientRuntimeService:
             event = "tool_execution_failed"
         await self.audit.log(
             entity_type="client",
-            entity_id=client_id,
-            event_type=event,
-            actor_type=ActorType.AGENT,
-            metadata={"tool": name, "arguments": patch_args, "result": result},
-        )
-        if isinstance(result, dict):
-            return result
-        return {"ok": False, "error": "Tool returned invalid response type."}
+                entity_id=client_id,
+                event_type=event,
+                actor_type=ActorType.AGENT,
+                metadata={"tool": name, "arguments": patch_args, "result": result},
+            )
+        return result
+
+    def _normalize_tool_arguments(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(args)
+
+        if name != "update_booking_field":
+            return normalized
+
+        raw_field_name = str(normalized.get("field_name", "")).strip().lower()
+        if raw_field_name in _FIELD_NAME_ALIASES:
+            normalized["field_name"] = _FIELD_NAME_ALIASES[raw_field_name]
+        elif raw_field_name:
+            normalized["field_name"] = raw_field_name
+
+        field_name = str(normalized.get("field_name", "")).strip()
+        field_value = normalized.get("field_value")
+
+        if field_name == "booking_type" and isinstance(field_value, str):
+            lowered = field_value.strip().lower()
+            if "outcall" in lowered:
+                normalized["field_value"] = "outcall"
+            elif "incall" in lowered:
+                normalized["field_value"] = "incall"
+
+        if field_name == "duration_minutes":
+            if isinstance(field_value, str):
+                extracted = self._extract_duration_minutes(field_value)
+                if extracted is not None:
+                    normalized["field_value"] = extracted
+
+        if field_name == "client_age":
+            if isinstance(field_value, str):
+                extracted_age = self._extract_age(field_value)
+                if extracted_age is not None:
+                    normalized["field_value"] = extracted_age
+
+        if field_name == "client_size_inches":
+            if isinstance(field_value, str):
+                match = re.search(r"\b(\d{1,2})\b", field_value)
+                if match:
+                    normalized["field_value"] = int(match.group(1))
+
+        if field_name == "alone_policy_confirmed" and isinstance(field_value, str):
+            lowered_bool = field_value.strip().lower()
+            if lowered_bool in {"yes", "y", "true", "1", "ok", "okay", "fine"}:
+                normalized["field_value"] = True
+            elif lowered_bool in {"no", "n", "false", "0"}:
+                normalized["field_value"] = False
+
+        return normalized
 
     async def _guard_update_field_from_inbound(
         self,

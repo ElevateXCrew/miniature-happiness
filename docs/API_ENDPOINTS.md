@@ -51,6 +51,9 @@ Notes:
   - Incall address is shared at final confirmation summary stage, not immediately after incall selection.
   - When inbound media is present, attachment context is injected into runtime inbound text so Alysha can respond naturally to image-only messages.
   - On WhatsApp inbound media, runtime sends an explicit client-facing media acknowledgment in Alysha voice and marks the attachment as receipt-received in booking context.
+  - Runtime blocks draft-only review-claim phrasing (e.g. "just reviewing / I'll confirm soon") for inbound media acknowledgments; those phrases are allowed only when booking context is actually pending review or confirmed.
+  - Runtime normalizes common tool-call argument aliases/mis-casing before tool execution (for example `duration -> duration_minutes`, `client_size -> client_size_inches`, `client_alone_policy -> alone_policy_confirmed`, and `Incall -> incall`).
+  - Runtime writes deterministic failure telemetry for all tool-failure branches (`tool_execution_failed` audit + failed-tool metric increment), including unknown tool and early-guard failures.
   - SMS and WhatsApp share the same natural booking collection style; media-sharing steps are WhatsApp-only and SMS clients are routed to WhatsApp when media is needed.
 - `POST /agent/send-message`
   - Internal endpoint for deterministic outbound dispatch.
