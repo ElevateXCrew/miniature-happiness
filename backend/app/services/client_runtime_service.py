@@ -226,7 +226,11 @@ class ClientRuntimeService:
         )
         if any(marker in lowered for marker in ack_markers):
             return text
-        return f"I have received your photo/screenshot babe 😊\n{text}" if text else "I have received your photo/screenshot babe 😊"
+        return (
+            f"I have received your photo/screenshot babe 😊\n{text}"
+            if text
+            else "I have received your photo/screenshot babe 😊"
+        )
 
     async def _generate_llm_reply(
         self,
