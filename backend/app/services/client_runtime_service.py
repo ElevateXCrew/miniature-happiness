@@ -184,16 +184,29 @@ class ClientRuntimeService:
 
         # If the LLM hallucinates a review-in-progress message but the booking
         # is not actually pending/confirmed, replace with a safe ack + guidance.
+        # IMPORTANT: do NOT replace if there is an active DRAFT booking — the
+        # receipt was just received as part of the ongoing collection flow and
+        # the LLM's "I'll confirm soon" is natural continuity, not a hallucination.
         review_markers = ("just reviewing", "i'll confirm soon", "ill confirm soon")
         if any(marker in lowered for marker in review_markers):
             has_review_context = await self._has_pending_review_context(session_id)
             if not has_review_context:
-                return (
-                    "I have received your photo/screenshot babe 😊 "
-                    "Share your date and time and I'll sort the booking for you."
-                )
+                # Only replace if there is also no active draft booking — if
+                # there IS a draft, the receipt was received mid-collection and
+                # the LLM reply is valid; keep it.
+                session = await self.sessions.get_by_id(session_id)
+                has_active_draft = False
+                if session and session.active_booking_id:
+                    booking = await self.bookings.get_by_id(session.active_booking_id)
+                    has_active_draft = booking is not None and booking.status == BookingStatus.DRAFT
+                if not has_active_draft:
+                    return (
+                        "I have received your photo/screenshot babe 😊 "
+                        "Send me your preferred date and time and I'll get that sorted."
+                    )
 
         return acked
+
 
     async def _has_pending_review_context(self, session_id: uuid.UUID) -> bool:
         session = await self.sessions.get_by_id(session_id)

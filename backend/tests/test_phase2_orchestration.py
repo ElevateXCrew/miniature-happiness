@@ -248,7 +248,7 @@ async def test_whatsapp_media_ack_does_not_claim_review_without_pending_context(
 
     assert "just reviewing" not in out.lower()
     assert "i'll confirm soon" not in out.lower()
-    assert "share your date and time" in out.lower()
+    assert "date and time" in out.lower()
 
 
 @pytest.mark.asyncio
