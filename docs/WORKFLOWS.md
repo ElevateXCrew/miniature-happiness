@@ -8,9 +8,9 @@
 4. If booking intent is unclear, keep chat natural and do not start collection tools yet.
 5. On clear booking intent, create/update draft booking.
 6. Collect required fields in strict order: datetime -> booking type -> duration -> outcall address(if outcall) -> age -> ethnicity -> size -> alone policy.
-7. Once availability date/time is already known and client asks to book, send mandatory consent prompt first.
-8. After consent, send one bulk request message for all remaining required details (plus optional name).
-9. If client bulk reply misses any required detail, ask only missing fields one by one in required order.
+7. Continue collection naturally with GPT-led chat while respecting required field order and existing booking records.
+8. If the client gives partial details, ask only for missing required fields naturally (no rigid server-side consent/bulk intercept).
+9. Keep SMS and WhatsApp collection tone/flow aligned; media sharing is WhatsApp-only and SMS should route media requests to WhatsApp same number.
 10. Before LLM generation, runtime pre-captures required fields from inbound text when possible.
 10a. Runtime may use advisory guard tool checks (`advisory_check_booking_field_update`) for planning, but advisory results never bypass mutation-time guard enforcement.
 11. Runtime blocks out-of-order/hallucinated field saves unless the value is present in current inbound text.
@@ -28,6 +28,7 @@
 
 ## 2) Outcall Flow with Advance and Receipt
 
+0. Keep booking collection conversationally natural on both SMS and WhatsApp (same tone and flow).
 1. Booking type set to `outcall`.
 2. Collect outcall address.
 3. Request advance payment for transport.

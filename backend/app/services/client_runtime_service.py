@@ -43,7 +43,6 @@ _BOOKING_INTENT_TERMS = {
     "slot",
 }
 _YES_TERMS = {"yes", "y", "yeah", "yep", "confirm", "go ahead", "ok", "okay"}
-_BOOKING_CONSENT_PROMPT = "I need to collect some information for the booking, if you don't mind?"
 
 
 @dataclass
@@ -258,14 +257,6 @@ class ClientRuntimeService:
         system_prompt = self._load_channel_prompt(channel, extra_context=booking_context)
         history = await self.messages.list_for_session(session_id)
 
-        staged_reply = await self._handle_two_step_collection_flow(
-            session_id=session_id,
-            inbound_text=inbound_text,
-            history=history,
-        )
-        if staged_reply is not None:
-            return staged_reply
-
         confirm_reply = await self._handle_llm_confirmation_reply(
             session_id=session_id,
             inbound_text=inbound_text,
@@ -284,7 +275,8 @@ class ClientRuntimeService:
             )
 
         chat_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-        for msg in history[-12:]:
+        history_window = history if len(history) <= 120 else history[-120:]
+        for msg in history_window:
             role = "user" if msg.direction == MessageDirection.INBOUND else "assistant"
             chat_messages.append({"role": role, "content": msg.body or ""})
         chat_messages.append({"role": "user", "content": inbound_text})
@@ -362,127 +354,23 @@ class ClientRuntimeService:
                     if name == "update_booking_field" and result.get("ok"):
                         field_saved_this_turn = True
 
-                # After saving a field, inject a system directive so the LLM
-                # continues the collection flow instead of just saying "Thank you".
                 if field_saved_this_turn:
-                    next_step = result.get("next_step", "")
                     directive = (
                         "[SYSTEM — internal only, never quote this to the client] "
-                        f"Got that, got that. {next_step} "
-                        "Stay warm and in character as Alysha. Keep your reply to 1–2 lines. "
-                        "Do NOT say 'thank you', 'got it', or acknowledge the save. "
-                        "Just ask the next question naturally."
+                        "A booking field was just saved. Continue naturally in Alysha's voice, "
+                        "using booking records so you do not re-ask saved fields."
                     )
                     chat_messages.append({"role": "system", "content": directive})
                 continue
 
             content = (msg.content or "").strip()
             if content:
-                content = await self._override_redundant_prompt_for_booking(
-                    session_id=session_id,
-                    llm_content=content,
-                )
                 await self._maybe_set_awaiting_confirmation_state(session_id=session_id)
                 return AgentReply(text=self._ensure_short_style(content), tool_traces=tool_traces)
 
         return AgentReply(
             text="I can help with that babe. What date and time did you want?",
             tool_traces=tool_traces,
-        )
-
-    async def _handle_two_step_collection_flow(
-        self,
-        *,
-        session_id: uuid.UUID,
-        inbound_text: str,
-        history: list[Any],
-    ) -> AgentReply | None:
-        """
-        Enforce booking collection sequence:
-        1) Consent prompt
-        2) Single bulk info request
-        3) Missing fields one-by-one
-        """
-        session = await self.sessions.get_by_id(session_id)
-        if session is None or session.active_booking_id is None:
-            return None
-
-        booking = await self.bookings.get_by_id(session.active_booking_id)
-        if booking is None or booking.status != BookingStatus.DRAFT:
-            return None
-
-        # Initial availability stage should already have date/time before booking.
-        if booking.scheduled_start_at is None:
-            return None
-
-        lowered = inbound_text.strip().lower()
-        consent_recent = self._was_recent_booking_consent_prompt(history)
-        bulk_recent = self._was_recent_bulk_info_prompt(history)
-
-        if self._has_booking_intent(inbound_text) and not consent_recent and not bulk_recent:
-            return AgentReply(text=_BOOKING_CONSENT_PROMPT, tool_traces=[])
-
-        if consent_recent:
-            if any(token in lowered for token in _YES_TERMS):
-                return AgentReply(
-                    text=self._build_bulk_info_request_message(booking),
-                    tool_traces=[],
-                )
-            return AgentReply(
-                text="No worries babe. Tell me when you want to continue booking 😊",
-                tool_traces=[],
-            )
-
-        if not bulk_recent:
-            return None
-
-        latest_booking = await self.bookings.get_by_id(booking.id)
-        if latest_booking is None:
-            return None
-
-        next_field = self.booking_service.get_next_required_field(latest_booking)
-        if next_field is None:
-            return None
-
-        if self._is_smalltalk_or_greeting(inbound_text):
-            return None
-
-        return AgentReply(text=self._question_for_field(next_field), tool_traces=[])
-
-    def _was_recent_booking_consent_prompt(self, history: list[Any]) -> bool:
-        needle = _BOOKING_CONSENT_PROMPT.lower()
-        for msg in reversed(history[-4:]):
-            if msg.direction != MessageDirection.OUTBOUND:
-                continue
-            body = (msg.body or "").strip().lower()
-            return needle in body
-        return False
-
-    def _was_recent_bulk_info_prompt(self, history: list[Any]) -> bool:
-        markers = (
-            "send these in one message",
-            "booking type (incall or outcall)",
-            "confirm it'll be just you",
-        )
-        for msg in reversed(history[-4:]):
-            if msg.direction != MessageDirection.OUTBOUND:
-                continue
-            body = (msg.body or "").strip().lower()
-            return any(marker in body for marker in markers)
-        return False
-
-    def _build_bulk_info_request_message(self, booking: Booking) -> str:
-        if booking.booking_type == BookingType.OUTCALL:
-            location_piece = "your full outcall address"
-        elif booking.booking_type == BookingType.INCALL:
-            location_piece = "(no address needed for incall)"
-        else:
-            location_piece = "if outcall, include your full address"
-
-        return (
-            "Perfect babe. Send these in one message: booking type (incall or outcall), "
-            "duration, age, ethnicity, size, and confirm it'll be just you. "
-            f"Also share {location_piece}."
         )
 
     async def _handle_llm_confirmation_reply(
@@ -1103,73 +991,6 @@ class ClientRuntimeService:
             return False
         return any(term in lowered for term in _BOOKING_INTENT_TERMS)
 
-    async def _override_redundant_prompt_for_booking(
-        self,
-        *,
-        session_id: uuid.UUID,
-        llm_content: str,
-    ) -> str:
-        session = await self.sessions.get_by_id(session_id)
-        if session is None or session.active_booking_id is None:
-            return llm_content
-
-        booking = await self.bookings.get_by_id(session.active_booking_id)
-        if booking is None or booking.status != BookingStatus.DRAFT:
-            return llm_content
-
-        lowered = llm_content.lower()
-
-        # Detect what the LLM is asking about (broad matching to catch all phrasings).
-        asks_time = (
-            "what date" in lowered
-            or "what time" in lowered
-            or "which time" in lowered
-            or "date and time" in lowered
-            or "date & time" in lowered
-            or "when do you" in lowered
-            or "when would you" in lowered
-        )
-        asks_type = ("incall or outcall" in lowered) or (
-            "come to me" in lowered and "come to you" in lowered
-        )
-        asks_age = (
-            "how old" in lowered
-            or "confirm your age" in lowered
-            or "your age" in lowered
-            or "are you 18" in lowered
-            or "age please" in lowered
-        )
-        asks_ethnicity = "ethnicity" in lowered
-        asks_duration = (
-            "how long" in lowered
-            or "1 hour or 2" in lowered
-            or "duration" in lowered
-            or "how many hours" in lowered
-        )
-
-        # Suppress only if the field is already collected.
-        if asks_time and booking.scheduled_start_at is not None:
-            return self._next_question_for_booking(booking)
-        if asks_type and booking.booking_type is not None:
-            return self._next_question_for_booking(booking)
-        if asks_age and booking.client_age is not None:
-            return self._next_question_for_booking(booking)
-        if asks_ethnicity and booking.client_ethnicity is not None:
-            return self._next_question_for_booking(booking)
-        if asks_duration and booking.duration_minutes is not None:
-            return self._next_question_for_booking(booking)
-        return llm_content
-
-    def _next_question_for_booking(self, booking: Booking) -> str:
-        if booking.booking_type is None:
-            return "Would you prefer incall or outcall, babe?"
-
-        next_field = self.booking_service.get_next_required_field(booking)
-        if next_field is not None:
-            return self._question_for_field(next_field)
-
-        return "Perfect babe, let me send your confirmation details now 😊"
-
     def _parse_tool_datetime(self, value: Any) -> datetime | None:
         if not isinstance(value, str):
             return None
@@ -1699,19 +1520,15 @@ class ClientRuntimeService:
         lines.append(
             "\nSTAY IN CHARACTER: You are Alysha (real person, not a bot). "
             "Never mention checking, validation, collection, or system terms."
-            "\n✓ PROACTIVE FLOW: Once client intent is clear, lead the flow and "
-            "ask the next question naturally. Do not wait for the client to "
-            "ask what comes next."
-            "\n✓ FIELD ORDER: Ask fields in this exact order: " + collection_order + "."
-            "\n✓ INTEREST GATE: If no active draft exists, keep chat natural and only start "
-            "collecting after the client clearly shows booking intent."
-            "\n✓ SKIP FIELDS: NEVER ask for a field that already shows a value above."
-            "\n✓ DURATION RULE: Always ask and confirm duration after booking type unless "
-            "the client explicitly provided duration in their current message."
-            "\n✓ AFTER ALL FIELDS COLLECTED: Send a warm confirmation summary with all "
-            "details. Do not ask 'shall I proceed?'; send confirmation and wait for YES."
-            "\n✓ INCALL ADDRESS: Do not share the incall address until sending the "
-            "final confirmation message."
+            "\n✓ NATURAL FLOW: Keep the conversation natural and concise, and collect missing "
+            "details without robotic phrasing."
+            "\n✓ FIELD ORDER: Collect missing fields in this order: " + collection_order + "."
+            "\n✓ SKIP FILLED FIELDS: Never ask for a field that already has a value above."
+            "\n✓ INTEREST GATE: If no active draft exists, only begin booking collection after "
+            "clear booking intent from the client."
+            "\n✓ FINAL CONFIRMATION: After all required fields are present, send a warm summary "
+            "and wait for YES."
+            "\n✓ INCALL ADDRESS TIMING: Share incall address only in final confirmation summary."
         )
         return "\n".join(lines)
 

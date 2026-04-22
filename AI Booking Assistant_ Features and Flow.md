@@ -106,6 +106,8 @@ The assistant should remember:
 
 This memory should survive interruptions and allow the assistant to continue naturally later.
 
+Collection style should remain natural and human on both WhatsApp and SMS (same conversational flow), while media sharing/screenshot handling remains WhatsApp-only with SMS handoff to the same number.
+
 If conversation history is admin-cleared for a session, session-linked history artifacts must also be cleared (messages, linked media, linked notifications, and linked bookings including draft/confirmed), and session state should reset.
 
 ---

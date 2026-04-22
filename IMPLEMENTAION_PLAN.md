@@ -49,7 +49,8 @@ This file is the single execution source of truth for project planning.
   - Age capture only accepts explicit age statements and rejects inferred numeric values from unrelated text.
   - One-on-one confirmations accept short replies like `ok/okay/fine` to avoid repeated prompts.
   - Incall address is sent at final confirmation stage (not immediately after booking type selection).
-  - Runtime enforces a strict two-step booking intake after availability: consent question first, then one bulk request for remaining required details before one-by-one missing-field recovery.
+  - Runtime now prioritizes GPT-led natural booking collection with full recent session history and live booking-record context, removing rigid consent/bulk-request server intercepts.
+  - SMS and WhatsApp now share the same natural collection tone/flow; media sharing stays WhatsApp-only with same-number handoff from SMS.
 - Worker mobile chat relay:
   - Worker `POST /worker/messages` relay intent now generates client-facing text through agent runtime, not raw passthrough text.
 - Media behavior:

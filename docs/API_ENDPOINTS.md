@@ -41,7 +41,7 @@ Notes:
   - Enforces booking-intent gate before availability checks can start collection when no active draft exists.
   - Preserves duration collection order by not persisting default availability pre-check duration unless inbound client text explicitly includes duration.
   - Applies deterministic pre-capture for the next required booking field from inbound text before LLM generation to reduce repeated follow-up questions.
-  - Enforces strict two-step booking intake after availability date/time exists: consent prompt first, then one bulk request for remaining required details, then one-by-one follow-up only for missing required fields.
+  - Uses GPT-led conversational booking collection with full recent session history and live booking-record context, without rigid consent/bulk-request server-side prompt interception.
   - Applies anti-hallucination guards for booking collection: tool updates are rejected when a field is out-of-order or value is not supported by current inbound client text.
   - Exposes advisory pre-check tool `advisory_check_booking_field_update` for model planning, while keeping hard enforcement on `update_booking_field` before any persistence.
   - Applies post-decision continuity guard: if active draft linkage is cleared by admin decision transitions, runtime responds from latest session booking status rather than re-entering draft collection with a "lost draft" prompt.
@@ -50,6 +50,7 @@ Notes:
   - Incall address is shared at final confirmation summary stage, not immediately after incall selection.
   - When inbound media is present, attachment context is injected into runtime inbound text so Alysha can respond naturally to image-only messages.
   - On WhatsApp inbound media, runtime sends an explicit client-facing media acknowledgment in Alysha voice and marks the attachment as receipt-received in booking context.
+  - SMS and WhatsApp share the same natural booking collection style; media-sharing steps are WhatsApp-only and SMS clients are routed to WhatsApp when media is needed.
 - `POST /agent/send-message`
   - Internal endpoint for deterministic outbound dispatch.
 
