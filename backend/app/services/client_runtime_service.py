@@ -240,15 +240,6 @@ class ClientRuntimeService:
         channel: Channel,
         inbound_text: str,
     ) -> AgentReply:
-        if not settings.openai_api_key.strip():
-            return await self._generate_fallback_reply(
-                session_id=session_id,
-                client_id=client_id,
-                worker_id=worker_id,
-                channel=channel,
-                inbound_text=inbound_text,
-            )
-
         session = await self.sessions.get_by_id(session_id)
         if session is None:
             return AgentReply(text="Hey babe 😘", tool_traces=[])
@@ -282,6 +273,15 @@ class ClientRuntimeService:
         )
         if confirm_reply is not None:
             return confirm_reply
+
+        if not settings.openai_api_key.strip():
+            return await self._generate_fallback_reply(
+                session_id=session_id,
+                client_id=client_id,
+                worker_id=worker_id,
+                channel=channel,
+                inbound_text=inbound_text,
+            )
 
         chat_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
         for msg in history[-12:]:
