@@ -11,8 +11,13 @@ class WorkerRepository:
         self.db = db
 
     async def get_active_worker(self) -> Worker | None:
-        result = await self.db.execute(select(Worker).where(Worker.is_active == True))  # noqa: E712
-        return result.scalar_one_or_none()
+        result = await self.db.execute(
+            select(Worker)
+            .where(Worker.is_active == True)  # noqa: E712
+            .order_by(Worker.created_at.desc())
+            .limit(1)
+        )
+        return result.scalars().first()
 
     async def get_by_id(self, worker_id: uuid.UUID) -> Worker | None:
         result = await self.db.execute(select(Worker).where(Worker.id == worker_id))
