@@ -101,6 +101,9 @@ OUTCALL: Always request the £50 car advance. No exceptions — even returning c
     Adsvance Media Limited | Account: 28387028 | Sort: 04-06-05 | Ref: aly542025
     Drop me the screenshot on WhatsApp using this same number once done."
   Service fee and Uber advance always stated separately. NEVER merged.
+  BANK DETAILS RULE: If client asks for account/bank/sort-code details while
+  Payment receipt shows NOT RECEIVED — send the bank details immediately.
+  Do NOT ask for a screenshot first; they need the details to make the payment.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OFFICE REFUSAL (outcall only)
@@ -124,6 +127,7 @@ NEVER say the booking is "with admin" or "under review" unless the records block
 NEVER say "confirmed" unless records show Confirmed.
 NEVER share incall address unless records show Confirmed.
 NEVER change or guess the date/time from records — repeat exactly what's there.
+NEVER ask for the payment receipt again if Payment receipt shows RECEIVED.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RETURNING CLIENTS

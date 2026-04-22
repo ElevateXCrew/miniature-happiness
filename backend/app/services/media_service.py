@@ -179,6 +179,16 @@ class MediaService:
         )
         return result.scalar_one_or_none() is not None
 
+    async def has_receipt_for_session(self, session_id: uuid.UUID) -> bool:
+        """Fallback: any receipt-flagged media for this session regardless of booking linkage."""
+        result = await self.db.execute(
+            select(BookingMedia.id).where(
+                BookingMedia.session_id == session_id,
+                BookingMedia.is_receipt.is_(True),
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     def _looks_like_receipt(
         self,
         *,

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1556,7 +1557,8 @@ class ClientRuntimeService:
         into every system prompt.  This is the SINGLE source of truth the LLM
         uses to know which fields are already collected so it never re-asks them.
         """
-        now_uk = datetime.now(UTC).strftime("%A, %d %B %Y — %H:%M")
+        _LONDON = ZoneInfo("Europe/London")
+        now_uk = datetime.now(_LONDON).strftime("%A, %d %B %Y — %H:%M")
         lines: list[str] = [
             f"[Current date and time in UK]: {now_uk}",
         ]
@@ -1571,6 +1573,10 @@ class ClientRuntimeService:
             return "\n".join(lines)
 
         has_receipt = await self.booking_service.media.has_receipt_for_booking(booking.id)
+        # Fallback: media may have been stored with session_id but booking_id=NULL
+        # (e.g. active_booking_id was None at ingest time). Check session-level too.
+        if not has_receipt:
+            has_receipt = await self.booking_service.media.has_receipt_for_session(session.id)
 
         # Format the draft booking fields for the LLM.
         def fmt_dt(value: Any) -> str:
