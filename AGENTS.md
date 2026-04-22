@@ -29,10 +29,12 @@
 - Worker mobile chat-first execution is active: `POST /worker/messages` now supports query, command, client relay, and free-form agent chat intents with structured `executed_actions` in response.
 - Runtime facade split is now active: worker chat/relay paths use a worker runtime facade and worker prompt policy, while client inbound and admin decision messaging use a client runtime facade over shared core logic.
 - Worker realtime stream now carries worker-targeted chat and operation updates (`worker.chat_reply`, `worker.operation.completed`) plus worker-owned booking lifecycle updates.
+- Admin Live Chat realtime refresh is hardened: backend now emits session message events (`session.inbound_message`, `session.outbound_message`) on every inbound/outbound turn so new WhatsApp/SMS chats appear without waiting for booking status changes.
 - Admin delete-history now clears full session artifacts: messages, linked media, linked notifications, and linked bookings (including draft/confirmed), then resets session state.
 - Tool call normalization hardening is active: runtime now normalizes common alias/mis-cased tool arguments before execution (for example `duration -> duration_minutes`, `client_size -> client_size_inches`, `Incall -> incall`) and falls back placeholder client ids for media-routing tool calls.
 - Tool failure telemetry hardening is active: all runtime tool-failure branches now emit `tool_execution_failed` audit events and increment failed-tool counters consistently.
 - Outcall review defaulting is active: when an outcall draft is otherwise complete at submit-for-review time and advance amount is missing, backend now defaults `advance_required_gbp` to 50 so booking can move to admin queue.
+- Confirmation routing guard is hardened: when a session is already in `AWAITING_CLIENT_CONFIRMATION` with an active draft, explicit client YES now proceeds to review submission without requiring a recent confirmation-prompt phrase match.
 - Current backend verification snapshot: 79 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.
 

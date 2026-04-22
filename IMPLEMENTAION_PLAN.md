@@ -15,6 +15,8 @@ This file is the single execution source of truth for project planning.
 - Worker mobile chat-first path is active: `/worker/messages` is the primary worker interaction endpoint with deterministic intent handling, Alysha-style free-form chat replies, and `executed_actions` response traces.
 - Worker realtime visibility now includes worker-targeted chat/operation events and worker-owned booking status updates.
 - Runtime path separation is active via facades: worker mobile chat/relay uses worker runtime policy, while client inbound/admin decision messaging uses client runtime policy over shared deterministic core services.
+- Admin Live Chat realtime hardening is active: conversation orchestrator now emits per-turn session message events so the admin sessions list refreshes as soon as WhatsApp/SMS messages arrive.
+- Confirmation routing guard is hardened: explicit client YES in `AWAITING_CLIENT_CONFIRMATION` now submits active draft for review without requiring a recent phrase match in outbound prompt history.
 - Tool-call normalization hardening is active in client runtime: common alias/mis-cased tool arguments are normalized before tool execution, and placeholder client ids for media-routing tool calls fall back to server-trusted client identity.
 - Tool-failure telemetry hardening is active in client runtime: all failure branches now emit `tool_execution_failed` audit events and increment failed-tool counters consistently.
 - Outcall review defaulting is active: when outcall draft collection is otherwise complete and `advance_required_gbp` is missing at submit-for-review time, backend defaults it to 50 GBP to avoid false non-submission loops.

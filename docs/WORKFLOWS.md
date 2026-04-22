@@ -27,6 +27,7 @@
 19. Alysha sends a short client-facing decision message that keeps continuity with recent conversation tone.
 20. If client replies after decision and active draft has been cleared, runtime answers using latest session booking status (confirmed/rejected/cancelled) instead of restarting collection.
 21. Finalize state and emit admin sync events.
+22. Every inbound/outbound chat turn emits session message events to admin realtime stream, so Live Chat updates without waiting for booking-status transitions.
 
 ## 2) Outcall Flow with Advance and Receipt
 

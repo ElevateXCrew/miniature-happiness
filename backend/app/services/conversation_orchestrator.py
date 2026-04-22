@@ -16,6 +16,7 @@ from app.repositories.message_repo import MessageRepository
 from app.repositories.session_repo import SessionRepository
 from app.repositories.worker_repo import WorkerRepository
 from app.services.client_runtime_service import ClientRuntimeService
+from app.services.event_stream import admin_event_stream
 from app.services.media_service import MediaService
 from app.services.notification_service import NotificationService
 from app.services.twilio_gateway import TwilioGateway
@@ -152,6 +153,20 @@ class ConversationOrchestrator:
         session.last_channel = channel
         session.last_inbound_at = inbound_event_time or datetime.now(UTC)
         await self.sessions.update(session)
+        admin_event_stream.publish(
+            "session.inbound_message",
+            {
+                "session_id": str(session.id),
+                "client_id": str(client.id),
+                "client_phone_e164": client.phone_e164,
+                "channel": channel.value,
+                "message_id": str(inbound_message.id),
+                "preview": (inbound_text or "")[:140],
+                "last_inbound_at": session.last_inbound_at.isoformat()
+                if session.last_inbound_at
+                else None,
+            },
+        )
 
         for media_item in media_items:
             await self.media.attach(
@@ -201,6 +216,18 @@ class ConversationOrchestrator:
             },
         )
         await self.messages.save(outbound)
+        admin_event_stream.publish(
+            "session.outbound_message",
+            {
+                "session_id": str(session.id),
+                "client_id": str(client.id),
+                "client_phone_e164": client.phone_e164,
+                "channel": channel.value,
+                "message_id": str(outbound.id),
+                "preview": (reply.text or "")[:140],
+                "dispatch_ok": send_result.ok,
+            },
+        )
         await self.idempotency.set_result_ref(
             provider=InboundProvider.TWILIO,
             external_id=message_sid,
@@ -279,6 +306,18 @@ class ConversationOrchestrator:
             },
         )
         await self.messages.save(outbound)
+        admin_event_stream.publish(
+            "session.outbound_message",
+            {
+                "session_id": str(session.id),
+                "client_id": str(client.id),
+                "client_phone_e164": client.phone_e164,
+                "channel": channel.value,
+                "message_id": str(outbound.id),
+                "preview": (text or "")[:140],
+                "dispatch_ok": send_result.ok,
+            },
+        )
         if send_result.ok:
             metrics.incr("twilio_outbound_send_ok_total")
         else:

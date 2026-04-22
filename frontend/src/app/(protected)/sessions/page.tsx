@@ -198,6 +198,8 @@ export default function SessionsPage() {
     (event: StreamEnvelope) =>
       event.type === 'booking.status_changed'
       || event.type === 'booking.submitted_for_review'
+      || event.type === 'session.inbound_message'
+      || event.type === 'session.outbound_message'
       || event.type.startsWith('worker.'),
     () => { void load(); },
   );

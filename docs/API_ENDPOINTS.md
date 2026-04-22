@@ -196,6 +196,7 @@ Example relay action entry:
 
 Notes:
 - Stream now emits booking lifecycle and worker sync events with incremental `id` for resume via `Last-Event-ID`.
+- Admin stream also emits session chat activity events (`session.inbound_message`, `session.outbound_message`) so Live Chat can refresh immediately on new WhatsApp/SMS turns.
 - Admin stream emits booking lifecycle, worker command, permission, and notification lifecycle events.
 - Worker stream is role-guarded (`worker` only) and emits worker-targeted updates for:
   - `worker.permissions.updated`

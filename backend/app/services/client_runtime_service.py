@@ -464,11 +464,12 @@ class ClientRuntimeService:
         if session is None:
             return None
 
-        if session.state != ConversationState.AWAITING_CLIENT_CONFIRMATION:
-            if not self._was_recent_confirmation_prompt(history):
-                return None
-
         if session.active_booking_id is None:
+            if (
+                session.state != ConversationState.AWAITING_CLIENT_CONFIRMATION
+                and not self._was_recent_confirmation_prompt(history)
+            ):
+                return None
             terminal_reply = await self._reply_for_latest_session_booking(session.id)
             if terminal_reply is not None:
                 return terminal_reply
@@ -479,6 +480,11 @@ class ClientRuntimeService:
 
         booking = await self.bookings.get_by_id(session.active_booking_id)
         if booking is None:
+            if (
+                session.state != ConversationState.AWAITING_CLIENT_CONFIRMATION
+                and not self._was_recent_confirmation_prompt(history)
+            ):
+                return None
             terminal_reply = await self._reply_for_latest_session_booking(session.id)
             if terminal_reply is not None:
                 return terminal_reply

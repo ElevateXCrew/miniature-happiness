@@ -234,6 +234,41 @@ async def test_admin_stream_emits_booking_status_changed_on_approve(
 
 
 @pytest.mark.asyncio
+async def test_admin_stream_emits_session_events_on_incoming_message(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _always_ok(
+        self: TwilioGateway, *, to_phone_e164: str, channel: str, text: str
+    ) -> OutboundSendResult:
+        return OutboundSendResult(ok=True, sid="SM_OK_RT_001", error=None)
+
+    monkeypatch.setattr(TwilioGateway, "send_client_message", _always_ok)
+
+    current_history = admin_event_stream.history_since(None)
+    last_event_id = current_history[-1].id if current_history else None
+
+    response = await client.post(
+        "/agent/process-incoming",
+        json={
+            "channel": "whatsapp",
+            "phone_e164": "+447700911111",
+            "inbound_text": "Hi babe",
+            "message_sid": f"SM_RT_{uuid.uuid4().hex}",
+            "raw_payload": {"Timestamp": "2026-04-22T11:00:00Z"},
+        },
+    )
+    assert response.status_code == 200
+
+    new_events = admin_event_stream.history_since(last_event_id)
+    inbound_events = [event for event in new_events if event.type == "session.inbound_message"]
+    outbound_events = [event for event in new_events if event.type == "session.outbound_message"]
+
+    assert inbound_events
+    assert outbound_events
+
+
+@pytest.mark.asyncio
 async def test_admin_stream_emits_notification_created_and_status_changed(
     client: AsyncClient,
     db: AsyncSession,

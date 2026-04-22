@@ -172,6 +172,8 @@ After the client confirms:
 - it becomes visible for admin review
 - the client remains in the conversation with context preserved
 
+Admin live chat visibility should refresh on each inbound/outbound turn (not only booking status transitions), so ongoing WhatsApp/SMS conversations appear immediately in the control panel.
+
 ---
 
 ### Step 6: Admin Action
