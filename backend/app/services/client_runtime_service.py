@@ -162,9 +162,27 @@ class ClientRuntimeService:
         acked = self._ensure_media_ack_in_reply(text)
         lowered = acked.lower()
 
-        if channel == Channel.WHATSAPP and "whatsapp" in lowered and "send" in lowered:
+        # On WhatsApp, strip any instruction to send/share on WhatsApp since
+        # the client is already on WhatsApp. Be aggressive: any mention of
+        # whatsapp alongside a send/share directive is a routing slip.
+        if channel == Channel.WHATSAPP and "whatsapp" in lowered:
+            # Remove sentences that contain whatsapp + send/share/forward
+            sentences = re.split(r"(?<=[.!?])\s+", acked)
+            cleaned = [
+                s
+                for s in sentences
+                if not (
+                    "whatsapp" in s.lower()
+                    and any(v in s.lower() for v in ("send", "share", "forward"))
+                )
+            ]
+            cleaned_text = " ".join(cleaned).strip()
+            if cleaned_text:
+                return cleaned_text
             return "I have received your photo/screenshot babe 😊"
 
+        # If the LLM hallucinates a review-in-progress message but the booking
+        # is not actually pending/confirmed, replace with a safe ack + guidance.
         review_markers = ("just reviewing", "i'll confirm soon", "ill confirm soon")
         if any(marker in lowered for marker in review_markers):
             has_review_context = await self._has_pending_review_context(session_id)
