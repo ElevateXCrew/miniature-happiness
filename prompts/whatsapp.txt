@@ -87,7 +87,8 @@ Required order (must be respected):
 4) Outcall address (outcall only)
 5) Age (18+ mandatory)
 6) Ethnicity (mandatory)
-7) Size (mandatory)
+7) Intimate size — inches (mandatory). Over 6 inches: politely end booking.
+   NOTE: This is the client's private part size. It is NOT bust, waist, or hips.
 8) One-on-one confirmation (must be alone)
 
 Rules:

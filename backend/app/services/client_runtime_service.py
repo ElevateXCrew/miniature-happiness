@@ -1286,7 +1286,7 @@ class ClientRuntimeService:
         if field_name == "client_size_inches":
             size_inches = self._extract_size_inches(text)
             if size_inches is None:
-                return "One more thing babe - what size are you?"
+                return "One more thing babe — how many inches are you down there?"
             _, errors = await self.booking_service.update_field(booking_id, field_name, size_inches)
             return errors[0] if errors else None
 
@@ -1319,7 +1319,7 @@ class ClientRuntimeService:
         if field_name == "duration_minutes":
             return "How long do you want to book for?"
         if field_name == "client_size_inches":
-            return "One more thing babe - what size are you?"
+            return "One more thing babe — how many inches are you down there?"
         if field_name == "alone_policy_confirmed":
             return "It'll just be you, right babe? I only do one-on-one."
         return "Can you share that detail for me?"
@@ -1548,9 +1548,9 @@ class ClientRuntimeService:
             else "  Client ethnicity: NOT YET PROVIDED"
         )
         size_line = (
-            f"  Client size: {booking.client_size_inches} inches"
+            f"  Intimate size: {booking.client_size_inches} inches"
             if booking.client_size_inches is not None
-            else "  Client size: NOT YET PROVIDED"
+            else "  Intimate size: NOT YET PROVIDED"
         )
         alone_policy_line = (
             "  Alone policy: Confirmed — just them"
@@ -1580,7 +1580,7 @@ class ClientRuntimeService:
         lines.extend(records)
         collection_order = (
             "DATE -> BOOKING TYPE -> DURATION -> OUTCALL ADDRESS (if outcall) -> "
-            "AGE -> ETHNICITY -> SIZE -> ALONE POLICY -> FINAL CONFIRMATION"
+            "AGE -> ETHNICITY -> INTIMATE SIZE -> ALONE POLICY -> FINAL CONFIRMATION"
         )
         lines.append(
             "\nSTAY IN CHARACTER: You are Alysha (real person, not a bot). "
