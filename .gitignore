@@ -37,4 +37,4 @@ node_modules/
 .next/
 
 
-media
+/backend/media/
