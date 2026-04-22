@@ -1,10 +1,8 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    admin_password: str
-    worker_password: str
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -33,10 +31,22 @@ class Settings(BaseSettings):
     # Auth
     access_token_ttl_minutes: int = 30
     refresh_token_ttl_minutes: int = 10080
-    seed_admin_email: str = "admin@alysha.local"
-    seed_admin_password: str = "admin123"
-    seed_worker_email: str = "worker@alysha.local"
-    seed_worker_password: str = "worker123"
+    seed_admin_email: str = Field(
+        default="admin@alysha.local",
+        validation_alias=AliasChoices("SEED_ADMIN_EMAIL", "ADMIN_EMAIL"),
+    )
+    seed_admin_password: str = Field(
+        default="admin123",
+        validation_alias=AliasChoices("SEED_ADMIN_PASSWORD", "ADMIN_PASSWORD"),
+    )
+    seed_worker_email: str = Field(
+        default="worker@alysha.local",
+        validation_alias=AliasChoices("SEED_WORKER_EMAIL", "WORKER_EMAIL"),
+    )
+    seed_worker_password: str = Field(
+        default="worker123",
+        validation_alias=AliasChoices("SEED_WORKER_PASSWORD", "WORKER_PASSWORD"),
+    )
 
     # Worker seed
     default_worker_name: str = "Alysha"
