@@ -612,6 +612,13 @@ async def test_outcall_confirmation_requires_advance_and_receipt(
     client: AsyncClient,
     db: AsyncSession,
 ) -> None:
+    """
+    Outcall approval gate:
+    - Blocked when advance_received=False AND no receipt media exists.
+    - Allowed when advance_received=True (flag set directly, no media required).
+    - Allowed when receipt media exists even if advance_received was False
+      (auto-sync: service sets advance_received=True from media truth).
+    """
     worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
     c = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
     db.add_all([worker, c])
@@ -645,28 +652,79 @@ async def test_outcall_confirmation_requires_advance_and_receipt(
     db.add(booking)
     await db.flush()
 
+    # No advance and no receipt — must be blocked.
     not_paid = await client.post(f"/admin/bookings/{booking.id}/approve")
     assert not_paid.status_code == 422
     assert "advance" in not_paid.text.lower()
 
+    # advance_received=True is sufficient — no media file required.
     booking.advance_received = True
+    db.add(booking)
     await db.flush()
 
-    no_receipt = await client.post(f"/admin/bookings/{booking.id}/approve")
-    assert no_receipt.status_code == 422
-    assert "receipt" in no_receipt.text.lower()
+    ok = await client.post(f"/admin/bookings/{booking.id}/approve")
+    assert ok.status_code == 200
+    assert ok.json()["status"] == "confirmed"
 
-    media = MediaService(db)
-    attached = await media.attach(
+
+@pytest.mark.asyncio
+async def test_outcall_confirmation_auto_syncs_advance_from_receipt_media(
+    client: AsyncClient,
+    db: AsyncSession,
+) -> None:
+    """
+    When advance_received=False but a receipt media file exists (is_receipt=True),
+    the service must auto-set advance_received=True and allow approval.
+    This covers the real-world case where the client sends the WhatsApp receipt
+    before the booking draft is linked, so the media is stored under session_id
+    but advance_received is never explicitly flipped.
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    c = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, c])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=c.id,
+        worker_id=worker.id,
+        state=ConversationState.WAITING_REVIEW,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=c.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.PENDING_REVIEW,
+        booking_type=BookingType.OUTCALL,
+        scheduled_start_at=start,
+        duration_minutes=60,
+        scheduled_end_at=start + timedelta(minutes=60),
+        client_age=28,
+        client_ethnicity="British",
+        outcall_address="12 River Rd",
+        advance_required_gbp=50,
+        advance_received=False,
+    )
+    db.add(booking)
+    await db.flush()
+
+    # Attach receipt media linked to session (not booking — simulates pre-link scenario).
+    media_svc = MediaService(db)
+    attached = await media_svc.attach(
         client_id=c.id,
         session_id=session.id,
         source_url="https://example.com/receipt-proof.jpg",
         channel=Channel.WHATSAPP,
-        booking_id=booking.id,
+        booking_id=None,  # not linked to booking yet
         media_type="image/jpeg",
     )
     assert attached.is_receipt is True
 
+    # Approval must succeed: service finds receipt via session fallback and auto-syncs.
     ok = await client.post(f"/admin/bookings/{booking.id}/approve")
     assert ok.status_code == 200
     assert ok.json()["status"] == "confirmed"

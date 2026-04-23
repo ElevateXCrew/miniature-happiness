@@ -38,7 +38,7 @@
 - Tool failure telemetry hardening is active: all runtime tool-failure branches now emit `tool_execution_failed` audit events and increment failed-tool counters consistently.
 - Outcall review defaulting is active: when an outcall draft is otherwise complete at submit-for-review time and advance amount is missing, backend now defaults `advance_required_gbp` to 50 so booking can move to admin queue.
 - Confirmation routing guard is hardened: when a session is already in `AWAITING_CLIENT_CONFIRMATION` with an active draft, explicit client YES now proceeds to review submission without requiring a recent confirmation-prompt phrase match.
-- Current backend verification snapshot: 102 passing tests.
+- Current backend verification snapshot: 103 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.
 
 ## Read First (Order)

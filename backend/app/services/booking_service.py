@@ -681,11 +681,24 @@ class BookingService:
         if booking.booking_type != BookingType.OUTCALL:
             return []
 
+        # Check receipt via booking_id first, then fall back to session-level
+        # (media may have been stored before active_booking_id was linked on the session).
+        has_receipt = await self.media.has_receipt_for_booking(booking.id)
+        if not has_receipt and booking.session_id is not None:
+            has_receipt = await self.media.has_receipt_for_session(booking.session_id)
+
+        # Auto-sync advance_received flag from media truth so admins are never
+        # blocked when the receipt image exists but the boolean wasn't flipped.
+        if has_receipt and not booking.advance_received:
+            booking.advance_received = True
+            await self.repo.save(booking)
+
+        # Advance is considered received if either:
+        #   (a) a receipt media file is present (is_receipt=True), or
+        #   (b) advance_received was already set True (e.g. manually by admin/agent).
+        # Both conditions are collapsed into the single advance_received flag above.
         if not booking.advance_received:
             return ["Outcall booking cannot be confirmed before advance is received."]
-        has_receipt = await self.media.has_receipt_for_booking(booking.id)
-        if not has_receipt:
-            return ["Outcall booking cannot be confirmed without a receipt image."]
         return []
 
     def _validate_booking_type_present(self, booking: Any) -> list[str]:
