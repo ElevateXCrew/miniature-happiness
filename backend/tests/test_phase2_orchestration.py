@@ -248,7 +248,8 @@ async def test_whatsapp_media_ack_does_not_claim_review_without_pending_context(
 
     assert "just reviewing" not in out.lower()
     assert "i'll confirm soon" not in out.lower()
-    assert "date and time" in out.lower()
+    # The clean prefix ("Yes babe, got it!") must be preserved
+    assert "got it" in out.lower()
 
 
 @pytest.mark.asyncio
@@ -1811,3 +1812,250 @@ async def test_admin_approve_transitions_booking_to_confirmed_non_regression(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "confirmed"
+
+
+# ---------------------------------------------------------------------------
+# New regression tests: affirmative variants + draft-state sanitizer
+# ---------------------------------------------------------------------------
+
+
+def _make_complete_draft(
+    client_id: uuid.UUID,
+    worker_id: uuid.UUID,
+    session_id: uuid.UUID,
+    booking_type: BookingType = BookingType.INCALL,
+) -> Booking:
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    return Booking(
+        client_id=client_id,
+        worker_id=worker_id,
+        session_id=session_id,
+        status=BookingStatus.DRAFT,
+        booking_type=booking_type,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+        client_age=25,
+        client_ethnicity="Asian",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "affirmative",
+    [
+        "sure",
+        "alright",
+        "sounds good",
+        "fine",
+        "great",
+        "perfect",
+        "absolutely",
+        "definitely",
+        "of course",
+        "let's do it",
+        "lets go",
+        "proceed",
+        "agreed",
+    ],
+)
+async def test_affirmative_variants_submit_draft_for_review(
+    db: AsyncSession,
+    affirmative: str,
+) -> None:
+    """
+    Each natural affirmative in _YES_TERMS must trigger submit_for_review
+    when all fields are collected and session is AWAITING_CLIENT_CONFIRMATION.
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.AWAITING_CLIENT_CONFIRMATION,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = _make_complete_draft(person.id, worker.id, session.id)
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    # Add a recent outbound summary so _was_recent_confirmation_prompt returns True
+    outbound_prompt = Message(
+        session_id=session.id,
+        direction=MessageDirection.OUTBOUND,
+        channel=Channel.WHATSAPP,
+        sender_type=SenderType.AGENT,
+        body="Does that all look right to you babe? Just let me know 💕",
+    )
+    db.add(outbound_prompt)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+    reply = await runtime._handle_llm_confirmation_reply(
+        session_id=session.id,
+        inbound_text=affirmative,
+        history=[outbound_prompt],
+    )
+
+    assert reply is not None, f"Expected submission for affirmative '{affirmative}'"
+    refreshed = await db.get(Booking, booking.id)
+    assert refreshed is not None
+    assert refreshed.status == BookingStatus.PENDING_REVIEW, (
+        f"Booking should be PENDING_REVIEW after '{affirmative}', got {refreshed.status}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_draft_state_sanitizer_strips_false_review_claim(
+    db: AsyncSession,
+) -> None:
+    """
+    _sanitize_draft_review_claim must remove sentences containing false
+    review/approval claims when the active booking is still a Draft.
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    booking = _make_complete_draft(person.id, worker.id, session.id)
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+
+    # These are typical LLM hallucinations for draft-state bookings.
+    false_claims = [
+        "I'll confirm shortly once it's approved 😊",
+        "Great, it's with admin now. I'll update you soon.",
+        "Perfect babe, just reviewing. I'll message you shortly.",
+        "Your booking is in progress and I'll confirm soon.",
+        "All sorted! I'm finalizing everything and will update you shortly.",
+    ]
+
+    for claim in false_claims:
+        result = await runtime._sanitize_draft_review_claim(claim, session.id)
+        lowered = result.lower()
+        for marker in runtime._DRAFT_REVIEW_CLAIM_MARKERS:
+            assert marker not in lowered, (
+                f"Marker '{marker}' leaked through sanitizer for input: {claim!r}\n"
+                f"Got: {result!r}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_draft_state_sanitizer_preserves_clean_reply(
+    db: AsyncSession,
+) -> None:
+    """
+    _sanitize_draft_review_claim must NOT modify replies that contain no
+    false review-claim markers.
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.COLLECTING,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+
+    clean_replies = [
+        "What date and time were you thinking babe? 😊",
+        "Sure! What's your ethnicity babe?",
+        "One more thing — how many inches are you down there?",
+        "Brilliant, I'll need your address for outcall.",
+    ]
+
+    for reply in clean_replies:
+        result = await runtime._sanitize_draft_review_claim(reply, session.id)
+        assert result == reply, (
+            f"Sanitizer modified a clean reply.\nInput:  {reply!r}\nOutput: {result!r}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_draft_state_sanitizer_allows_true_pending_claim(
+    db: AsyncSession,
+) -> None:
+    """
+    _sanitize_draft_review_claim must NOT strip review claims when the
+    booking is genuinely in PENDING_REVIEW state.
+    """
+    worker = Worker(name="Alysha", timezone="Europe/London", is_active=True)
+    person = Client(phone_e164=f"+447{uuid.uuid4().int % 1_000_000_000:09d}")
+    db.add_all([worker, person])
+    await db.flush()
+
+    session = ConversationSession(
+        client_id=person.id,
+        worker_id=worker.id,
+        state=ConversationState.WAITING_REVIEW,
+        last_channel=Channel.WHATSAPP,
+    )
+    db.add(session)
+    await db.flush()
+
+    start_at = datetime.now(UTC) + timedelta(days=1)
+    booking = Booking(
+        client_id=person.id,
+        worker_id=worker.id,
+        session_id=session.id,
+        status=BookingStatus.PENDING_REVIEW,
+        booking_type=BookingType.INCALL,
+        scheduled_start_at=start_at,
+        duration_minutes=60,
+        scheduled_end_at=start_at + timedelta(minutes=60),
+        client_age=25,
+        client_ethnicity="Asian",
+        client_size_inches=5,
+        alone_policy_confirmed=True,
+    )
+    db.add(booking)
+    await db.flush()
+
+    session.active_booking_id = booking.id
+    db.add(session)
+    await db.flush()
+
+    runtime = AgentRuntimeService(db)
+
+    # This is a true statement when the booking is actually pending review.
+    text = "Perfect babe, it's with admin now. I'll update you soon."
+    result = await runtime._sanitize_draft_review_claim(text, session.id)
+    assert result == text, (
+        f"Sanitizer incorrectly stripped a legitimate pending-review claim.\n"
+        f"Got: {result!r}"
+    )
