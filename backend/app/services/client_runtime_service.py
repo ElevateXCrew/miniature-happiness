@@ -43,7 +43,32 @@ _BOOKING_INTENT_TERMS = {
     "availability",
     "slot",
 }
-_YES_TERMS = {"yes", "y", "yeah", "yep", "confirm", "go ahead", "ok", "okay"}
+_YES_TERMS = {
+    "yes",
+    "y",
+    "yeah",
+    "yep",
+    "confirm",
+    "go ahead",
+    "ok",
+    "okay",
+    "sure",
+    "alright",
+    "sounds good",
+    "fine",
+    "great",
+    "perfect",
+    "absolutely",
+    "definitely",
+    "of course",
+    "let's do it",
+    "lets do it",
+    "let's go",
+    "lets go",
+    "proceed",
+    "done",
+    "agreed",
+}
 _FIELD_NAME_ALIASES = {
     "age": "client_age",
     "ethnicity": "client_ethnicity",
@@ -191,16 +216,10 @@ class ClientRuntimeService:
                 return cleaned_text
             return "I have received your photo/screenshot babe 😊"
 
-        # If the LLM hallucinates a review-in-progress message but the booking
-        # is not actually pending/confirmed, replace with a safe ack + guidance.
-        review_markers = ("just reviewing", "i'll confirm soon", "ill confirm soon")
-        if any(marker in lowered for marker in review_markers):
-            has_review_context = await self._has_pending_review_context(session_id)
-            if not has_review_context:
-                return (
-                    "I have received your photo/screenshot babe 😊 "
-                    "Send me your preferred date and time and I'll get that sorted."
-                )
+        # Use the centralized sanitizer to strip false review/approval claims
+        # from draft-state replies. The media ack prefix is already prepended
+        # so we sanitize the full combined string.
+        acked = await self._sanitize_draft_review_claim(acked, session_id)
 
         return acked
 
@@ -219,6 +238,80 @@ class ClientRuntimeService:
 
         latest = await self.bookings.get_latest_for_session(session_id)
         return latest is not None and latest.status in review_statuses
+
+    # ------------------------------------------------------------------ #
+    #  Centralized draft-state sanitizer                                  #
+    # ------------------------------------------------------------------ #
+    # Phrases the LLM may produce that falsely imply the booking is       #
+    # already pending/approved when it is actually still a draft.         #
+    _DRAFT_REVIEW_CLAIM_MARKERS: tuple[str, ...] = (
+        "just reviewing",
+        "i'll confirm soon",
+        "ill confirm soon",
+        "i'll confirm shortly",
+        "ill confirm shortly",
+        "i will confirm shortly",
+        "confirm shortly",
+        "shortly once it's approved",
+        "shortly once its approved",
+        "with admin now",
+        "with the admin now",
+        "sent to admin",
+        "under review",
+        "pending review",
+        "approval soon",
+        "approved soon",
+        "message you shortly",
+        "update you shortly",
+        "i'll update you",
+        "ill update you",
+        "get back to you shortly",
+        "finalizing everything",
+        "finalising everything",
+        "in progress",
+    )
+
+    async def _sanitize_draft_review_claim(
+        self,
+        text: str,
+        session_id: uuid.UUID,
+    ) -> str:
+        """
+        Block false "pending review / confirm shortly" claims when the booking
+        is still a Draft.  Returns the original text unchanged when:
+          - booking is actually PENDING_REVIEW or CONFIRMED, or
+          - no draft-review marker is present in the text.
+
+        When a marker IS present but the booking is still a Draft, the reply
+        is left fully AI-generated — we just strip the offending claim so
+        Alysha still sounds natural without misleading the client.
+
+        Strategy: remove sentences that contain the marker phrase; if nothing
+        clean remains, fall back to a neutral bridge line.
+        """
+        lowered = text.lower()
+        if not any(marker in lowered for marker in self._DRAFT_REVIEW_CLAIM_MARKERS):
+            return text
+
+        # If booking is genuinely in review/confirmed, the claim is accurate.
+        if await self._has_pending_review_context(session_id):
+            return text
+
+        # Booking is Draft — remove sentences containing the false claim.
+        sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+        cleaned = []
+        for sentence in sentences:
+            s_lower = sentence.lower()
+            if any(marker in s_lower for marker in self._DRAFT_REVIEW_CLAIM_MARKERS):
+                continue
+            cleaned.append(sentence)
+
+        result = " ".join(cleaned).strip()
+        if result:
+            return result
+
+        # All sentences were tainted — return a context-safe neutral line.
+        return "Almost there babe, just a couple more details and we'll be set 😊"
 
     async def generate_admin_decision_reply(
         self,
@@ -279,6 +372,9 @@ class ClientRuntimeService:
             )
             content = (completion.choices[0].message.content or "").strip()
             if content:
+                # Admin decision replies are for confirmed/rejected/cancelled bookings
+                # so review-claim sanitization is intentionally skipped here — the
+                # booking state will have already transitioned before this fires.
                 return AgentReply(text=self._ensure_short_style(content), tool_traces=[])
         except Exception as exc:
             logger.warning("Admin decision LLM generation failed, using fallback", error=str(exc))
@@ -442,7 +538,10 @@ class ClientRuntimeService:
             content = (msg.content or "").strip()
             if content:
                 await self._maybe_set_awaiting_confirmation_state(session_id=session_id)
-                return AgentReply(text=self._ensure_short_style(content), tool_traces=tool_traces)
+                sanitized = await self._sanitize_draft_review_claim(
+                    self._ensure_short_style(content), session_id
+                )
+                return AgentReply(text=sanitized, tool_traces=tool_traces)
 
         return AgentReply(
             text="I can help with that babe. What date and time did you want?",
@@ -589,6 +688,18 @@ class ClientRuntimeService:
                 or "shall i go ahead" in body
                 or "go ahead?" in body
                 or "shall we go ahead" in body
+                # Natural summary/approval prompts
+                or "just to confirm babe" in body
+                or "all good?" in body
+                or "sound good?" in body
+                or "sounds good?" in body
+                or "happy with that?" in body
+                or "confirm that?" in body
+                or "good to go?" in body
+                or "let me know" in body
+                or "shall i book" in body
+                or "want to go ahead" in body
+                or "ready to confirm" in body
             )
         return False
 

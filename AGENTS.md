@@ -26,6 +26,9 @@
 - Image-aware inbound guard is active: when media arrives, runtime receives attachment context in inbound text so Alysha can respond naturally.
 - WhatsApp media acknowledgment is now explicit: when client sends media, Alysha responds with a short receipt/photo acknowledgment in-context, and inbound media is marked receipt-true for booking/media context continuity.
 - WhatsApp media review-claim guard is hardened: "just reviewing / I'll confirm soon" wording is now only allowed when booking context is actually pending/confirmed; draft-only context gets a neutral receipt acknowledgment.
+- Centralized draft-state review-claim sanitizer is active: all LLM-generated outbound replies now pass through `_sanitize_draft_review_claim` which strips sentences containing false "confirm shortly / under review / with admin now / finalizing" claims when the active booking is still a Draft; replies that are genuinely clean are passed through unchanged; pending/confirmed bookings are exempt.
+- Affirmative confirmation parsing is expanded: `_YES_TERMS` now includes "sure", "alright", "sounds good", "fine", "great", "perfect", "absolutely", "definitely", "of course", "let's do it", "lets go", "proceed", "agreed" so natural client confirmations trigger `submit_for_review` without requiring "yes/ok".
+- Prompt review-claim guard is tightened: `whatsapp.txt` and `sms.txt` no longer suggest "I'll confirm shortly once it's approved" as an example; both now instruct Alysha to never imply submission/review until the client has actually said YES.
 - Worker mobile chat-first execution is active: `POST /worker/messages` now supports query, command, client relay, and free-form agent chat intents with structured `executed_actions` in response.
 - Runtime facade split is now active: worker chat/relay paths use a worker runtime facade and worker prompt policy, while client inbound and admin decision messaging use a client runtime facade over shared core logic.
 - Worker realtime stream now carries worker-targeted chat and operation updates (`worker.chat_reply`, `worker.operation.completed`) plus worker-owned booking lifecycle updates.
@@ -35,7 +38,7 @@
 - Tool failure telemetry hardening is active: all runtime tool-failure branches now emit `tool_execution_failed` audit events and increment failed-tool counters consistently.
 - Outcall review defaulting is active: when an outcall draft is otherwise complete at submit-for-review time and advance amount is missing, backend now defaults `advance_required_gbp` to 50 so booking can move to admin queue.
 - Confirmation routing guard is hardened: when a session is already in `AWAITING_CLIENT_CONFIRMATION` with an active draft, explicit client YES now proceeds to review submission without requiring a recent confirmation-prompt phrase match.
-- Current backend verification snapshot: 79 passing tests.
+- Current backend verification snapshot: 102 passing tests.
 - Active workstream: production bug triage, regression hardening, and launch governance closeout.
 
 ## Read First (Order)
